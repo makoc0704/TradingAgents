@@ -35,4 +35,12 @@ DEFAULT_CONFIG = {
     "risk_free_rate": 0.05,         # Annual risk-free rate (5%)
     "default_portfolio_value": 100000,  # Default portfolio value in USD
     "max_position_fraction": 0.25,  # Max fraction of portfolio for a single position
+    # Backtesting settings
+    "backtest_commission_rate": 0.001,     # Commission per trade (0.1%)
+    "backtest_slippage_rate": 0.0005,      # Slippage per trade (0.05%)
+    "backtest_trading_frequency": "daily", # "daily", "weekly", or "monthly"
+    "backtest_profile": "standard",        # "full", "standard", or "quick"
+    "backtest_reflection_mode": "periodic",# "none", "end_only", or "periodic"
+    "backtest_reflection_interval": 20,    # Days between reflections
+    "use_data_cache": True,                # Cache vendor API responses for backtests
 }

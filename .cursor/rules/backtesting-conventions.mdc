@@ -1,0 +1,143 @@
+---
+description: Conventions for the backtesting module (portfolio, runner, performance, report)
+globs: tradingagents/backtesting/**/*.py
+alwaysApply: false
+---
+
+# Backtesting Module Conventions
+
+## Purpose
+Orchestrates the TradingAgentsGraph over historical date ranges to measure strategy performance.
+No modifications to the agent graph itself — the backtester is a **consumer** of `propagate()`.
+
+## Architecture Decision
+We do NOT use `backtrader` for our backtesting. Reasons:
+- `backtrader` is designed for rule-based `Strategy.next()` loops, not LLM agent graphs.
+- We need full control over caching, reflection timing, and cost tracking.
+- `backtrader` remains as an optional dependency (`[baseline]`) for comparison strategies only.
+
+## Module Structure
+
+| File | Responsibility |
+|------|---------------|
+| `models.py` | `BacktestConfig`, `TradeRecord`, `DailySnapshot`, `BacktestResult` |
+| `portfolio.py` | Cash/position tracking, paper trade execution, slippage/commission |
+| `runner.py` | `BacktestRunner` — main loop calling `propagate()` per trading day |
+| `performance.py` | Aggregate metrics (reuses `tradingagents.risk.metrics`) |
+| `report.py` | JSON/text report generation from `BacktestResult` |
+
+## Data Structures (`models.py`)
+
+All dataclasses with `@dataclass`, every field type-annotated:
+
+```python
+@dataclass
+class BacktestConfig:
+    ticker: str
+    start_date: str                    # "YYYY-MM-DD"
+    end_date: str                      # "YYYY-MM-DD"
+    initial_capital: float             # e.g. 100_000
+    trading_frequency: str             # "daily" | "weekly" | "monthly"
+    commission_rate: float             # e.g. 0.001
+    slippage_rate: float               # e.g. 0.0005
+    selected_analysts: list[str]       # e.g. ["market", "fundamentals"]
+    backtest_profile: str              # "full" | "standard" | "quick"
+    reflection_mode: str               # "none" | "end_only" | "periodic"
+    reflection_interval: int           # days between reflections (for "periodic")
+    use_data_cache: bool               # enable vendor data caching
+    config: dict                       # full DEFAULT_CONFIG passthrough
+```
+
+## Portfolio (`portfolio.py`)
+
+- Single class `Portfolio` with explicit cash and position tracking.
+- `execute_buy()` takes `fraction` from `TradeSignal.position_size` — risk quantification drives sizing.
+- Commission and slippage are applied on every execution.
+- `hold()` is an explicit no-op that still records a `TradeRecord` for the audit trail.
+- Never allow negative cash (skip buy if insufficient funds).
+- All monetary values are `float`, share counts are `int` (whole shares only).
+
+## Runner (`runner.py`)
+
+- `BacktestRunner` is the single entry point.
+- Constructor takes `BacktestConfig`, internally creates `TradingAgentsGraph` and `Portfolio`.
+- The main `run()` loop:
+  1. Generate valid trading dates (skip weekends/holidays via market calendar).
+  2. For each date: `graph.propagate(ticker, date)` → `TradeSignal`.
+  3. Execute signal via `Portfolio`.
+  4. Record `DailySnapshot`.
+  5. Optionally reflect based on `reflection_mode`.
+  6. Return `BacktestResult`.
+- Must handle `propagate()` failures gracefully (log warning, treat as HOLD).
+- Uses `logging` (never `print()`).
+
+## Backtest Profiles
+
+Profiles control cost/thoroughness trade-off by adjusting existing graph parameters:
+
+| Profile | `selected_analysts` | `max_debate_rounds` | `max_risk_discuss_rounds` |
+|---------|-------------------|-------------------|-------------------------|
+| `"full"` | All 4 | Config default | Config default |
+| `"standard"` | `["market", "fundamentals"]` | 1 | 1 |
+| `"quick"` | `["market"]` | 1 | 1 |
+
+Profiles override the config dict passed to `TradingAgentsGraph` — no graph code changes needed.
+
+## Reflection Modes
+
+| Mode | Behavior | LLM cost |
+|------|----------|----------|
+| `"none"` | No reflection at all | 0 |
+| `"end_only"` | Single reflection with aggregate results after last trade | 5 calls |
+| `"periodic"` | Reflect every `reflection_interval` trading days | moderate |
+
+Reflection calls `graph.reflect_and_remember()` with structured performance data.
+
+## Data Caching
+
+- **Mandatory for backtesting** — without caching, API rate limits make backtests impractical.
+- Cache key: `{method}_{ticker}_{start_date}_{end_date}` as JSON files in `data_cache/`.
+- Cache is enabled by default (`use_data_cache: True`).
+- Caching logic wraps `route_to_vendor()`, not the individual vendor functions.
+- Cache files are deterministic and permanent (same inputs = same outputs).
+
+## Performance Metrics (`performance.py`)
+
+- **Reuses** functions from `tradingagents.risk.metrics` (Sharpe, Sortino, max drawdown).
+- Do NOT duplicate calculation logic — import and compose.
+- Additional backtest-specific metrics: Win Rate, Profit Factor, Exposure Time, Buy-and-Hold comparison.
+- All functions are pure (input `list[DailySnapshot]`, output `dict`).
+
+## Report (`report.py`)
+
+- `to_json()`: Full serializable result for storage.
+- `to_summary()`: Human-readable text for CLI output.
+- `to_dataframe()`: pandas DataFrame of daily snapshots for analysis.
+- No LLM calls in report generation.
+
+## Integration Points
+
+- `BacktestRunner` imports `TradingAgentsGraph` from `tradingagents.graph.trading_graph`.
+- `Portfolio.execute_buy()` reads `TradeSignal.position_size.fraction` from `tradingagents.risk.models`.
+- `performance.py` imports from `tradingagents.risk.metrics`.
+- CLI gets a new `backtest` command in `cli/main.py`.
+
+## Config Keys (added to `default_config.py`)
+
+```python
+"backtest_commission_rate": 0.001,
+"backtest_slippage_rate": 0.0005,
+"backtest_trading_frequency": "daily",
+"backtest_profile": "standard",
+"backtest_reflection_mode": "periodic",
+"backtest_reflection_interval": 20,
+"use_data_cache": True,
+```
+
+## Testing Conventions
+
+- Tests live in `tests/test_backtesting/`.
+- `Portfolio` must be tested with deterministic price sequences (no API calls).
+- `BacktestRunner` tests mock `TradingAgentsGraph.propagate()` to avoid LLM calls.
+- `performance.py` tests use synthetic `DailySnapshot` lists with known expected results.
+- No test should require API keys or network access.
