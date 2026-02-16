@@ -43,4 +43,10 @@ DEFAULT_CONFIG = {
     "backtest_reflection_mode": "periodic",# "none", "end_only", or "periodic"
     "backtest_reflection_interval": 20,    # Days between reflections
     "use_data_cache": True,                # Cache vendor API responses for backtests
+    # Portfolio management settings
+    "portfolio_weighting_strategy": "equal",     # "equal", "risk_parity", "min_variance", "signal_weighted"
+    "portfolio_max_position_fraction": 0.30,     # Max weight per ticker
+    "portfolio_min_position_fraction": 0.05,     # Min weight per ticker
+    "portfolio_rebalance_threshold": 0.05,       # Drift that triggers rebalancing (5%)
+    "portfolio_rebalance_frequency": "weekly",   # "daily", "weekly", or "monthly"
 }

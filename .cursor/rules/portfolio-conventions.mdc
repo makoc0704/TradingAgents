@@ -1,0 +1,237 @@
+---
+description: Conventions for the portfolio management module (multi-asset orchestration, weighting, rebalancing)
+globs: tradingagents/portfolio/**/*.py
+alwaysApply: false
+---
+
+# Portfolio Management Module Conventions
+
+## Purpose
+Orchestrates the existing single-ticker `TradingAgentsGraph` across multiple assets
+to build and manage a diversified portfolio. This module sits **above** the agent graph —
+it is a consumer of `propagate()`, not a modification of it.
+
+## Core Architecture Decision: "Orchestrator above, not refactor within"
+
+- `TradingAgentsGraph.propagate(company_name, date)` remains single-ticker.
+- `AgentState`, LLM prompts, and the LangGraph workflow are NOT changed.
+- The `PortfolioManager` calls `propagate()` once per ticker per trading day (sequentially).
+- Parallel execution is NOT implemented in Phase 4 but the design allows a future
+  ThreadPool swap in the main loop.
+
+## Module Structure
+
+| File | Responsibility |
+|------|---------------|
+| `models.py` | `PortfolioConfig`, `Position`, `AllocationResult`, `PortfolioSnapshot` |
+| `universe.py` | `UNIVERSE_PRESETS` dict and `resolve_universe()` helper |
+| `optimizer.py` | `PortfolioOptimizer` — weighting strategies (equal, risk_parity, min_variance, signal_weighted) |
+| `correlation.py` | `calculate_correlation_matrix()`, `calculate_portfolio_var()`, `diversification_ratio()` |
+| `multi_portfolio.py` | `MultiAssetPortfolio` — multi-position tracking, per-ticker execution |
+| `rebalancer.py` | `Rebalancer` — drift detection, order generation |
+| `manager.py` | `PortfolioManager` — top-level orchestration (entry point) |
+
+## Data Structures (`models.py`)
+
+All dataclasses with `@dataclass`, every field type-annotated:
+
+```python
+@dataclass
+class PortfolioConfig:
+    tickers: List[str]                    # e.g. ["AAPL", "NVDA", "MSFT"]
+    start_date: str                       # "YYYY-MM-DD"
+    end_date: str                         # "YYYY-MM-DD"
+    initial_capital: float                # e.g. 100_000
+    weighting_strategy: str               # "equal" | "risk_parity" | "min_variance" | "signal_weighted"
+    max_position_fraction: float          # max per ticker (e.g. 0.30)
+    min_position_fraction: float          # min per ticker (e.g. 0.05)
+    rebalance_threshold: float            # drift that triggers rebalancing (e.g. 0.05)
+    rebalance_frequency: str              # "daily" | "weekly" | "monthly"
+    trading_frequency: str                # "daily" | "weekly" | "monthly"
+    backtest_profile: str                 # "full" | "standard" | "quick"
+    reflection_mode: str                  # "none" | "end_only" | "periodic"
+    reflection_interval: int              # days between reflections
+    use_data_cache: bool                  # enable vendor data caching
+    commission_rate: float                # e.g. 0.001
+    slippage_rate: float                  # e.g. 0.0005
+    config: Dict[str, Any]               # full DEFAULT_CONFIG passthrough
+
+@dataclass
+class Position:
+    ticker: str
+    shares: int
+    avg_entry_price: float
+    current_price: float
+    target_weight: float                  # desired allocation
+    actual_weight: float                  # current allocation
+
+@dataclass
+class AllocationResult:
+    weights: Dict[str, float]             # {"AAPL": 0.25, "NVDA": 0.35, ...}
+    method: str
+    portfolio_volatility: float
+    portfolio_var_95: float
+    diversification_ratio: float
+    correlation_matrix: Dict[str, Dict[str, float]]
+
+@dataclass
+class PortfolioSnapshot:
+    date: str
+    total_value: float
+    cash: float
+    positions: Dict[str, Position]
+    allocation: Optional[AllocationResult]
+    daily_return: float
+    cumulative_return: float
+    actions: Dict[str, str]               # {"AAPL": "BUY", "NVDA": "HOLD", ...}
+```
+
+## Universe Management (`universe.py`)
+
+- **Static ticker lists** with predefined presets. No dynamic screening.
+- `resolve_universe(name_or_list)` returns `List[str]`:
+  - If input is a list, return it as-is.
+  - If input is a preset name, look up `UNIVERSE_PRESETS[name]`.
+
+```python
+UNIVERSE_PRESETS = {
+    "magnificent_7": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"],
+    "sp500_tech_10": ["AAPL", "MSFT", "NVDA", "AVGO", "ORCL", "CRM", "AMD", "ADBE", "CSCO", "ACN"],
+    "diversified_5": ["AAPL", "JPM", "JNJ", "XOM", "PG"],
+}
+```
+
+- Dynamic universe selection is out of scope for Phase 4. The interface
+  (`resolve_universe`) allows future extension without breaking callers.
+
+## Weighting Strategies (`optimizer.py`)
+
+`PortfolioOptimizer` is stateless — all methods take data as arguments and return `AllocationResult`.
+
+| Strategy | Logic |
+|----------|-------|
+| `equal` | `1/n` for each ticker |
+| `risk_parity` | Weight inversely proportional to annualized volatility |
+| `min_variance` | Minimize portfolio variance using correlation matrix (scipy.optimize) |
+| `signal_weighted` | Weight based on LLM confidence from `TradeSignal` (BUY=high, HOLD=low, SELL=0) |
+
+Rules:
+- Every strategy must clamp weights to `[min_position_fraction, max_position_fraction]`.
+- Weights must sum to <= 1.0 (remainder stays in cash).
+- SELL signals set target weight to 0.0 for that ticker.
+- All strategies return `AllocationResult` — never raw floats.
+- `scipy.optimize` is allowed for `min_variance` only; no other external optimizer libraries.
+
+## Correlation Analysis (`correlation.py`)
+
+- Pure functions, no side effects.
+- Uses `RiskCalculator._fetch_price_data()` pattern to get historical data via vendor routing.
+- Input: `Dict[str, pd.Series]` of closing prices per ticker.
+- Output: correlation matrix as `pd.DataFrame` and scalar metrics.
+
+```python
+def calculate_correlation_matrix(price_series: Dict[str, pd.Series]) -> pd.DataFrame
+def calculate_portfolio_var(weights, cov_matrix, confidence=0.95) -> float
+def diversification_ratio(weights, volatilities, portfolio_volatility) -> float
+```
+
+## Multi-Asset Portfolio (`multi_portfolio.py`)
+
+- Extends the concept from `backtesting/portfolio.py` to multiple positions.
+- Internal state: `Dict[str, Position]` mapping ticker to position.
+- Shares the same slippage/commission model as the single-ticker `Portfolio`.
+- Methods:
+
+```python
+class MultiAssetPortfolio:
+    def execute_order(self, ticker, action, price, fraction, date) -> TradeRecord
+    def get_position(self, ticker) -> Optional[Position]
+    def get_total_value(self, prices: Dict[str, float]) -> float
+    def get_all_positions() -> Dict[str, Position]
+    def get_snapshot(self, date, prices, actions, allocation) -> PortfolioSnapshot
+```
+
+- `execute_order()` delegates to internal buy/sell/hold logic per ticker.
+- Cash is shared across all positions (single cash pool).
+- Never allow negative cash. If a buy would overdraw, reduce shares to fit.
+
+## Rebalancing (`rebalancer.py`)
+
+- **Drift-based**: Rebalance when `|actual_weight - target_weight| > threshold` for any ticker.
+- **Frequency-gated**: Only check drift at the configured `rebalance_frequency`.
+- Generates a list of `(ticker, action, fraction)` orders to reach target weights.
+- Considers transaction costs: skip rebalancing if total commission > expected benefit.
+- Sells overweight positions first, then buys underweight positions (to free up cash).
+
+```python
+class Rebalancer:
+    def check_drift(self, positions, target_weights, threshold) -> bool
+    def generate_orders(self, positions, target_weights, prices, cash, ...) -> List[RebalanceOrder]
+```
+
+## Manager (`manager.py`)
+
+`PortfolioManager` is the single entry point for portfolio backtesting.
+
+Main loop per trading day:
+1. For each ticker (sequentially): `graph.propagate(ticker, date)` -> `TradeSignal` + `RiskMetrics`
+2. Collect all signals and metrics into `Dict[str, TradeSignal]`
+3. `PortfolioOptimizer.optimize(signals, risk_metrics, ...)` -> `AllocationResult`
+4. `Rebalancer.check_drift(...)` -> if drift exceeds threshold, generate rebalance orders
+5. `MultiAssetPortfolio.execute_order(...)` for each order
+6. Record `PortfolioSnapshot`
+7. Optionally reflect (uses aggregate portfolio performance, not per-ticker)
+
+The manager creates a **separate `TradingAgentsGraph` instance** that is reused
+across all tickers (sequential calls to `propagate()` are safe because each call
+sets `self.ticker` before executing).
+
+## Memory Strategy: Shared with Ticker Tags
+
+- The 5 existing `FinancialSituationMemory` instances (bull, bear, trader, invest_judge,
+  risk_manager) are **shared** across all tickers in the portfolio.
+- ChromaDB similarity search naturally returns relevant reflections across assets.
+- No changes to `FinancialSituationMemory` are strictly required in Phase 4.
+- Future enhancement: add `ticker` as ChromaDB metadata for optional filtering.
+
+## Integration Points
+
+| Component | How Portfolio Module Uses It |
+|-----------|----------------------------|
+| `TradingAgentsGraph.propagate()` | Called once per ticker per day (unchanged) |
+| `RiskCalculator.calculate_risk_metrics()` | Called by graph internally; results in `AgentState["risk_metrics"]` |
+| `TradeSignal` from `risk.models` | Read by optimizer for signal-weighted strategy and by portfolio for execution |
+| `backtesting.data_cache` | Reused for vendor data caching (same `DataCache` + monkey-patch approach) |
+| `risk.metrics` functions | Reused for portfolio-level Sharpe, Sortino, drawdown |
+| `default_config.py` | New config keys for portfolio management |
+| `cli/main.py` | New `portfolio` command (future) |
+
+## Config Keys (added to `default_config.py`)
+
+```python
+# Portfolio management settings
+"portfolio_weighting_strategy": "equal",
+"portfolio_max_position_fraction": 0.30,
+"portfolio_min_position_fraction": 0.05,
+"portfolio_rebalance_threshold": 0.05,
+"portfolio_rebalance_frequency": "weekly",
+```
+
+## What This Module Does NOT Do
+
+- Does NOT modify `AgentState` or LLM prompts.
+- Does NOT introduce parallel execution (Phase 4 is sequential).
+- Does NOT implement dynamic universe screening.
+- Does NOT add a "Portfolio CIO" LLM agent (quantitative optimization only).
+- Does NOT replace `backtesting/portfolio.py` — that module continues to work for
+  single-ticker backtests. `MultiAssetPortfolio` is a new class alongside it.
+
+## Testing Conventions
+
+- Tests live in `tests/test_portfolio/`.
+- `MultiAssetPortfolio` tested with deterministic price sequences (no API calls).
+- `PortfolioOptimizer` tested with synthetic `RiskMetrics` and known expected weights.
+- `Rebalancer` tested with known drift scenarios and expected order lists.
+- `correlation.py` tested with synthetic price series with known correlations.
+- `PortfolioManager` tests mock `TradingAgentsGraph.propagate()` to avoid LLM calls.
+- No test should require API keys or network access.
