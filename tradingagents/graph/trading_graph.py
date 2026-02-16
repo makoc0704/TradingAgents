@@ -36,6 +36,8 @@ from tradingagents.agents.utils.agent_utils import (
     get_global_news
 )
 
+from tradingagents.risk import RiskCalculator
+
 from .conditional_logic import ConditionalLogic
 from .setup import GraphSetup
 from .propagation import Propagator
@@ -94,6 +96,9 @@ class TradingAgentsGraph:
         # Create tool nodes
         self.tool_nodes = self._create_tool_nodes()
 
+        # Initialize risk calculator
+        self.risk_calculator = RiskCalculator(self.config)
+
         # Initialize components
         self.conditional_logic = ConditionalLogic()
         self.graph_setup = GraphSetup(
@@ -106,11 +111,15 @@ class TradingAgentsGraph:
             self.invest_judge_memory,
             self.risk_manager_memory,
             self.conditional_logic,
+            self.risk_calculator,
         )
 
         self.propagator = Propagator()
         self.reflector = Reflector(self.quick_thinking_llm)
-        self.signal_processor = SignalProcessor(self.quick_thinking_llm)
+        self.signal_processor = SignalProcessor(
+            self.quick_thinking_llm,
+            risk_calculator=self.risk_calculator,
+        )
 
         # State tracking
         self.curr_state = None
@@ -190,7 +199,10 @@ class TradingAgentsGraph:
         self._log_state(trade_date, final_state)
 
         # Return decision and processed signal
-        return final_state, self.process_signal(final_state["final_trade_decision"])
+        return final_state, self.process_signal(
+            final_state["final_trade_decision"],
+            risk_metrics_dict=final_state.get("risk_metrics"),
+        )
 
     def _log_state(self, trade_date, final_state):
         """Log the final state to a JSON file."""
@@ -222,6 +234,7 @@ class TradingAgentsGraph:
             },
             "investment_plan": final_state["investment_plan"],
             "final_trade_decision": final_state["final_trade_decision"],
+            "risk_metrics": final_state.get("risk_metrics", {}),
         }
 
         # Save to file
@@ -252,6 +265,6 @@ class TradingAgentsGraph:
             self.curr_state, returns_losses, self.risk_manager_memory
         )
 
-    def process_signal(self, full_signal):
+    def process_signal(self, full_signal, risk_metrics_dict=None):
         """Process a signal to extract the core decision."""
-        return self.signal_processor.process_signal(full_signal)
+        return self.signal_processor.process_signal(full_signal, risk_metrics_dict)

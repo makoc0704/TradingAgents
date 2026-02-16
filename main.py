@@ -1,10 +1,8 @@
+from tradingagents import configure_logging
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
+configure_logging()
 
 # Create a custom config
 config = DEFAULT_CONFIG.copy()

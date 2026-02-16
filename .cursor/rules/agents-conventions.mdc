@@ -1,0 +1,41 @@
+---
+description: Conventions for creating and modifying LLM trading agents
+globs: tradingagents/agents/**/*.py
+alwaysApply: false
+---
+
+# Agent Conventions
+
+## Agent Structure
+Every agent is a factory function returning a node function compatible with LangGraph:
+
+```python
+def create_<role>_agent(llm, memory=None):
+    """Create a <role> agent node for the trading graph."""
+    def agent_node(state) -> dict:
+        # 1. Extract data from state
+        # 2. Retrieve past memories if memory is provided
+        # 3. Build prompt with data + memories
+        # 4. Invoke LLM
+        # 5. Return state update dict
+        ...
+    return agent_node
+```
+
+## State Contract
+- Read from `AgentState` fields: `company_of_interest`, `trade_date`, `messages`, report fields
+- Analyst agents return: `{"messages": [...], "<type>_report": report_text}`
+- Researcher agents return: `{"investment_debate_state": {...}}`
+- Risk agents return: `{"risk_debate_state": {...}}`
+- Never mutate state directly – always return a new dict
+
+## Memory Integration
+- Use `memory.get_memories(curr_situation, n_matches=2)` to retrieve past learnings
+- Build `curr_situation` from all 4 report fields concatenated
+- Include past memories in prompt as lessons learned
+
+## Prompts
+- System prompts define the agent's role and task clearly
+- Always include available data sources in the prompt
+- End analyst prompts with instruction to append a Markdown summary table
+- Trader/judge prompts must end with `FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**`

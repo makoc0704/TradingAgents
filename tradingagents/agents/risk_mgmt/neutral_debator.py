@@ -1,5 +1,16 @@
-import time
-import json
+from tradingagents.risk.models import RiskMetrics
+
+
+def _format_risk_metrics(state: dict) -> str:
+    """Build a human-readable risk metrics block from state, or return empty string."""
+    rm = state.get("risk_metrics")
+    if not rm or not isinstance(rm, dict) or "ticker" not in rm:
+        return ""
+    try:
+        metrics = RiskMetrics(**rm)
+        return "\n" + metrics.format_for_prompt() + "\n"
+    except (TypeError, KeyError):
+        return ""
 
 
 def create_neutral_debator(llm):
@@ -15,10 +26,11 @@ def create_neutral_debator(llm):
         sentiment_report = state["sentiment_report"]
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
+        risk_metrics_text = _format_risk_metrics(state)
 
         trader_decision = state["trader_investment_plan"]
 
-        prompt = f"""As the Neutral Risk Analyst, your role is to provide a balanced perspective, weighing both the potential benefits and risks of the trader's decision or plan. You prioritize a well-rounded approach, evaluating the upsides and downsides while factoring in broader market trends, potential economic shifts, and diversification strategies.Here is the trader's decision:
+        prompt = f"""As the Neutral Risk Analyst, your role is to provide a balanced perspective, weighing both the potential benefits and risks of the trader's decision or plan. You prioritize a well-rounded approach, evaluating the upsides and downsides while factoring in broader market trends, potential economic shifts, and diversification strategies. Ground your analysis in the quantitative risk metrics provided. Here is the trader's decision:
 
 {trader_decision}
 
@@ -28,9 +40,10 @@ Market Research Report: {market_research_report}
 Social Media Sentiment Report: {sentiment_report}
 Latest World Affairs Report: {news_report}
 Company Fundamentals Report: {fundamentals_report}
+{risk_metrics_text}
 Here is the current conversation history: {history} Here is the last response from the risky analyst: {current_risky_response} Here is the last response from the safe analyst: {current_safe_response}. If there are no responses from the other viewpoints, do not halluncinate and just present your point.
 
-Engage actively by analyzing both sides critically, addressing weaknesses in the risky and conservative arguments to advocate for a more balanced approach. Challenge each of their points to illustrate why a moderate risk strategy might offer the best of both worlds, providing growth potential while safeguarding against extreme volatility. Focus on debating rather than simply presenting data, aiming to show that a balanced view can lead to the most reliable outcomes. Output conversationally as if you are speaking without any special formatting."""
+Engage actively by analyzing both sides critically, addressing weaknesses in the risky and conservative arguments to advocate for a more balanced approach. Reference the quantitative risk metrics to arbitrate between the two sides — use volatility, VaR, Sharpe ratio, and drawdown data to determine where the reasonable middle ground lies. Challenge each of their points to illustrate why a moderate risk strategy might offer the best of both worlds, providing growth potential while safeguarding against extreme volatility. Focus on debating rather than simply presenting data, aiming to show that a balanced view can lead to the most reliable outcomes. Output conversationally as if you are speaking without any special formatting."""
 
         response = llm.invoke(prompt)
 

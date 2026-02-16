@@ -1,9 +1,12 @@
+import logging
 from typing import Annotated
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import yfinance as yf
 import os
 from .stockstats_utils import StockstatsUtils
+
+logger = logging.getLogger(__name__)
 
 def get_YFin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],
@@ -163,7 +166,7 @@ def get_stock_stats_indicators_window(
             ind_string += f"{date_str}: {value}\n"
         
     except Exception as e:
-        print(f"Error getting bulk stockstats data: {e}")
+        logger.error("Error getting bulk stockstats data: %s", e)
         # Fallback to original implementation if bulk method fails
         ind_string = ""
         curr_date_dt = datetime.strptime(curr_date, "%Y-%m-%d")
@@ -285,8 +288,8 @@ def get_stockstats_indicator(
             curr_date,
         )
     except Exception as e:
-        print(
-            f"Error getting stockstats indicator data for indicator {indicator} on {curr_date}: {e}"
+        logger.error(
+            "Error getting stockstats indicator data for indicator %s on %s: %s", indicator, curr_date, e
         )
         return ""
 

@@ -1,13 +1,12 @@
 import os
 
+_PROJECT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "."))
+
 DEFAULT_CONFIG = {
-    "project_dir": os.path.abspath(os.path.join(os.path.dirname(__file__), ".")),
+    "project_dir": _PROJECT_DIR,
     "results_dir": os.getenv("TRADINGAGENTS_RESULTS_DIR", "./results"),
-    "data_dir": "/Users/yluo/Documents/Code/ScAI/FR1-data",
-    "data_cache_dir": os.path.join(
-        os.path.abspath(os.path.join(os.path.dirname(__file__), ".")),
-        "dataflows/data_cache",
-    ),
+    "data_dir": os.getenv("TRADINGAGENTS_DATA_DIR", os.path.join(_PROJECT_DIR, "data")),
+    "data_cache_dir": os.path.join(_PROJECT_DIR, "dataflows/data_cache"),
     # LLM settings
     "llm_provider": "openai",
     "deep_think_llm": "o4-mini",
@@ -30,4 +29,10 @@ DEFAULT_CONFIG = {
         # Example: "get_stock_data": "alpha_vantage",  # Override category default
         # Example: "get_news": "openai",               # Override category default
     },
+    # Risk quantification settings
+    "risk_lookback_days": 60,       # Days of historical data for risk calculations
+    "risk_benchmark": "SPY",        # Benchmark ticker for beta calculation
+    "risk_free_rate": 0.05,         # Annual risk-free rate (5%)
+    "default_portfolio_value": 100000,  # Default portfolio value in USD
+    "max_position_fraction": 0.25,  # Max fraction of portfolio for a single position
 }

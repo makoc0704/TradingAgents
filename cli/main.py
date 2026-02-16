@@ -4,10 +4,11 @@ import typer
 from pathlib import Path
 from functools import wraps
 from rich.console import Console
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+from tradingagents import configure_logging
+
+configure_logging()
+
 from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.live import Live

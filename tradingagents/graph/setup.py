@@ -1,5 +1,6 @@
 # TradingAgents/graph/setup.py
 
+import logging
 from typing import Dict, Any
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph, START
@@ -7,8 +8,11 @@ from langgraph.prebuilt import ToolNode
 
 from tradingagents.agents import *
 from tradingagents.agents.utils.agent_states import AgentState
+from tradingagents.risk import RiskCalculator
 
 from .conditional_logic import ConditionalLogic
+
+logger = logging.getLogger(__name__)
 
 
 class GraphSetup:
@@ -25,6 +29,7 @@ class GraphSetup:
         invest_judge_memory,
         risk_manager_memory,
         conditional_logic: ConditionalLogic,
+        risk_calculator: RiskCalculator = None,
     ):
         """Initialize with required components."""
         self.quick_thinking_llm = quick_thinking_llm
@@ -36,6 +41,7 @@ class GraphSetup:
         self.invest_judge_memory = invest_judge_memory
         self.risk_manager_memory = risk_manager_memory
         self.conditional_logic = conditional_logic
+        self.risk_calculator = risk_calculator
 
     def setup_graph(
         self, selected_analysts=["market", "social", "news", "fundamentals"]
@@ -85,6 +91,26 @@ class GraphSetup:
             delete_nodes["fundamentals"] = create_msg_delete()
             tool_nodes["fundamentals"] = self.tool_nodes["fundamentals"]
 
+        # Create risk calculator node (quantitative, no LLM)
+        def risk_calculator_node(state) -> dict:
+            """Compute quantitative risk metrics and inject into state."""
+            ticker = state["company_of_interest"]
+            trade_date = state["trade_date"]
+
+            if self.risk_calculator is None:
+                logger.warning("RiskCalculator not configured, skipping risk metrics")
+                return {"risk_metrics": {}}
+
+            risk_metrics_obj = self.risk_calculator.calculate_risk_metrics(ticker, trade_date)
+            if risk_metrics_obj is None:
+                logger.warning("Could not compute risk metrics for %s on %s", ticker, trade_date)
+                return {"risk_metrics": {}}
+
+            logger.info("Risk metrics computed for %s: vol=%.4f, VaR95=%.4f, beta=%.2f",
+                        ticker, risk_metrics_obj.annualized_volatility,
+                        risk_metrics_obj.var_95, risk_metrics_obj.beta)
+            return {"risk_metrics": risk_metrics_obj.to_dict()}
+
         # Create researcher and manager nodes
         bull_researcher_node = create_bull_researcher(
             self.quick_thinking_llm, self.bull_memory
@@ -116,6 +142,9 @@ class GraphSetup:
             )
             workflow.add_node(f"tools_{analyst_type}", tool_nodes[analyst_type])
 
+        # Add risk calculator node (runs after analysts, before researchers)
+        workflow.add_node("Risk Calculator", risk_calculator_node)
+
         # Add other nodes
         workflow.add_node("Bull Researcher", bull_researcher_node)
         workflow.add_node("Bear Researcher", bear_researcher_node)
@@ -145,12 +174,15 @@ class GraphSetup:
             )
             workflow.add_edge(current_tools, current_analyst)
 
-            # Connect to next analyst or to Bull Researcher if this is the last analyst
+            # Connect to next analyst or to Risk Calculator if this is the last analyst
             if i < len(selected_analysts) - 1:
                 next_analyst = f"{selected_analysts[i+1].capitalize()} Analyst"
                 workflow.add_edge(current_clear, next_analyst)
             else:
-                workflow.add_edge(current_clear, "Bull Researcher")
+                workflow.add_edge(current_clear, "Risk Calculator")
+
+        # Risk Calculator feeds into the researcher debate
+        workflow.add_edge("Risk Calculator", "Bull Researcher")
 
         # Add remaining edges
         workflow.add_conditional_edges(

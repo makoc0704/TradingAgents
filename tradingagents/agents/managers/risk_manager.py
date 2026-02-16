@@ -1,5 +1,20 @@
-import time
-import json
+import logging
+
+from tradingagents.risk.models import RiskMetrics
+
+logger = logging.getLogger(__name__)
+
+
+def _format_risk_metrics(state: dict) -> str:
+    """Build a human-readable risk metrics block from state, or return empty string."""
+    rm = state.get("risk_metrics")
+    if not rm or not isinstance(rm, dict) or "ticker" not in rm:
+        return ""
+    try:
+        metrics = RiskMetrics(**rm)
+        return "\n" + metrics.format_for_prompt() + "\n"
+    except (TypeError, KeyError):
+        return ""
 
 
 def create_risk_manager(llm, memory):
@@ -11,9 +26,10 @@ def create_risk_manager(llm, memory):
         risk_debate_state = state["risk_debate_state"]
         market_research_report = state["market_report"]
         news_report = state["news_report"]
-        fundamentals_report = state["news_report"]
+        fundamentals_report = state["fundamentals_report"]
         sentiment_report = state["sentiment_report"]
         trader_plan = state["investment_plan"]
+        risk_metrics_text = _format_risk_metrics(state)
 
         curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
         past_memories = memory.get_memories(curr_situation, n_matches=2)
@@ -29,10 +45,20 @@ Guidelines for Decision-Making:
 2. **Provide Rationale**: Support your recommendation with direct quotes and counterarguments from the debate.
 3. **Refine the Trader's Plan**: Start with the trader's original plan, **{trader_plan}**, and adjust it based on the analysts' insights.
 4. **Learn from Past Mistakes**: Use lessons from **{past_memory_str}** to address prior misjudgments and improve the decision you are making now to make sure you don't make a wrong BUY/SELL/HOLD call that loses money.
+5. **Use Quantitative Risk Metrics**: Ground your decision in the hard numbers below. If VaR or drawdown is severe, factor that into position sizing. If Sharpe ratio is strong, that supports a more confident stance.
+
+{risk_metrics_text}
 
 Deliverables:
 - A clear and actionable recommendation: Buy, Sell, or Hold.
-- Detailed reasoning anchored in the debate and past reflections.
+- A confidence level: HIGH, MEDIUM, or LOW.
+- A recommended portfolio allocation percentage (0-25%).
+- Detailed reasoning anchored in the debate, quantitative metrics, and past reflections.
+
+Format your final recommendation as:
+FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**
+CONFIDENCE: **HIGH/MEDIUM/LOW**
+ALLOCATION: **X%**
 
 ---
 
