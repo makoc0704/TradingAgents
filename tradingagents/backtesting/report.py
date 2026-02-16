@@ -91,7 +91,7 @@ class BacktestReport:
             "=" * 60,
             "",
             f"  Ticker:          {c.ticker}",
-            f"  Period:          {c.start_date} → {c.end_date}",
+            f"  Period:          {c.start_date} to {c.end_date}",
             f"  Trading Days:    {r.total_trading_days}",
             f"  Profile:         {c.backtest_profile}",
             f"  Initial Capital: ${c.initial_capital:,.2f}",

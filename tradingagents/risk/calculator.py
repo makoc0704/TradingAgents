@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional
 
 import pandas as pd
 
-from tradingagents.dataflows.interface import route_to_vendor
+import tradingagents.dataflows.interface as _interface_mod
 from .models import RiskMetrics, PositionSize
 from . import metrics as m
 from . import position_sizing as ps
@@ -44,7 +44,7 @@ class RiskCalculator:
             start_dt = end_dt - timedelta(days=self.lookback_days + 60)
             start_str = start_dt.strftime("%Y-%m-%d")
 
-            raw = route_to_vendor("get_stock_data", ticker, start_str, trade_date)
+            raw = _interface_mod.route_to_vendor("get_stock_data", ticker, start_str, trade_date)
 
             if not raw or not isinstance(raw, str) or len(raw.strip()) == 0:
                 logger.warning("Empty stock data returned for %s", ticker)
@@ -61,10 +61,28 @@ class RiskCalculator:
         """Parse CSV text from vendor into a clean DataFrame.
 
         Handles various CSV formats returned by yfinance, Alpha Vantage, etc.
+        The vendor functions prepend comment lines (starting with ``#``) and
+        blank lines before the actual CSV data.  We strip those first so
+        ``pd.read_csv`` sees a clean header row.
         """
         from io import StringIO
 
-        df = pd.read_csv(StringIO(csv_text))
+        # Strip comment lines and leading blank lines added by vendor wrappers
+        clean_lines = []
+        for line in csv_text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            # Skip blank lines that appear before the actual CSV header
+            if not stripped and not clean_lines:
+                continue
+            clean_lines.append(line)
+
+        clean_csv = "\n".join(clean_lines)
+        if not clean_csv.strip():
+            raise ValueError("CSV text is empty after stripping comments")
+
+        df = pd.read_csv(StringIO(clean_csv))
 
         # Normalize column names — vendors use different capitalization
         col_map = {}
