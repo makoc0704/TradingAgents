@@ -1,0 +1,45 @@
+---
+description: Conventions for data vendor routing and dataflow implementations
+globs: tradingagents/dataflows/**/*.py
+alwaysApply: false
+---
+
+# Dataflows Conventions
+
+## Vendor Routing Architecture
+All data access goes through `interface.py` vendor routing:
+
+1. Agent calls abstract tool (e.g. `get_stock_data`)
+2. `agent_utils.py` routes to `interface.route_to_vendor(method, *args)`
+3. `interface.py` resolves vendor from config and calls implementation
+4. Automatic fallback to next vendor on failure
+
+## Adding a New Data Source
+1. Implement functions in a new file `tradingagents/dataflows/<vendor_name>.py`
+2. Register in `interface.py`:
+   - Add import at top
+   - Add to `VENDOR_METHODS` dict under the correct method key
+   - Add vendor name to `VENDOR_LIST` if new vendor
+3. Functions must match the existing signature of the method they implement
+4. Raise specific exceptions (e.g. `AlphaVantageRateLimitError`) for retryable errors
+
+## Data Function Signatures
+```python
+# Stock data: returns CSV-like string
+def get_stock(ticker: str, curr_date: str) -> str
+
+# Indicators: returns formatted string
+def get_indicator(ticker: str, indicator: str, curr_date: str, window: int = 30) -> str
+
+# News: returns formatted string  
+def get_news(query: str, start_date: str, end_date: str) -> str
+
+# Fundamentals: returns formatted string
+def get_fundamentals(ticker: str, curr_date: str) -> str
+```
+
+## Config
+- Category-level vendor config: `config["data_vendors"]["<category>"]`
+- Tool-level override: `config["tool_vendors"]["<method_name>"]`
+- Tool-level takes precedence over category-level
+- Use `logging` instead of `print()` for debug output

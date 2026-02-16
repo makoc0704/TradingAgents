@@ -1,0 +1,80 @@
+---
+description: Conventions for the quantitative risk module (metrics, position sizing, calculator)
+globs: tradingagents/risk/**/*.py
+alwaysApply: false
+---
+
+# Risk Module Conventions
+
+## Purpose
+Pure quantitative risk calculations — no LLM calls in this module.
+All functions operate on pandas DataFrames/Series and return numbers or dataclasses.
+
+## Data Structures (`models.py`)
+
+Three core dataclasses with `@dataclass` (not TypedDict):
+
+| Class | Role |
+|-------|------|
+| `RiskMetrics` | All computed risk numbers for a ticker + date |
+| `PositionSize` | Recommended position sizing result |
+| `TradeSignal` | Extended signal replacing the plain BUY/SELL/HOLD string |
+
+Every field must have a type annotation and a docstring-level comment.
+
+## Metrics (`metrics.py`)
+
+- Pure functions, no side effects, no state
+- Input: pandas DataFrame/Series + parameters
+- Output: `float` or `tuple[float, ...]`
+- Raise `ValueError` for insufficient data (e.g. < 2 data points)
+- Use `numpy` / `pandas` for computation, no external analytics libraries
+
+```python
+# Correct signature pattern
+def calculate_volatility(
+    prices: pd.Series,
+    window: int = 30,
+) -> tuple[float, float]:
+    """Calculate daily and annualized volatility.
+
+    Args:
+        prices: Series of closing prices, indexed by date.
+        window: Lookback window in trading days.
+
+    Returns:
+        Tuple of (daily_volatility, annualized_volatility).
+
+    Raises:
+        ValueError: If prices has fewer than 2 data points.
+    """
+```
+
+## Position Sizing (`position_sizing.py`)
+
+- Functions return `PositionSize` dataclass
+- Always clamp `fraction` to `[0.0, max_position_fraction]` from config
+- Never return negative fractions
+
+## Calculator (`calculator.py`)
+
+- `RiskCalculator` is the single entry point (facade)
+- Fetches price data via `tradingagents.dataflows.interface.route_to_vendor`
+- Composes results from `metrics.py` and `position_sizing.py` into `RiskMetrics`
+- Constructor takes `config: dict` (the project DEFAULT_CONFIG)
+
+## Integration Points
+
+- `RiskMetrics` is stored in `AgentState["risk_metrics"]` as a dict (via `dataclasses.asdict`)
+- Risk debater agents receive metrics as formatted text in their prompts
+- `SignalProcessor` returns `TradeSignal` with backward-compatible `.action` field
+
+## Config Keys (in `default_config.py`)
+
+```python
+"risk_lookback_days": 60,
+"risk_benchmark": "SPY",
+"risk_free_rate": 0.05,
+"default_portfolio_value": 100000,
+"max_position_fraction": 0.25,
+```

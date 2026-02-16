@@ -1,0 +1,57 @@
+---
+description: Testing conventions and patterns for the TradingAgents project
+globs: tests/**/*.py
+alwaysApply: false
+---
+
+# Testing Conventions
+
+## Framework
+- pytest with fixtures, no unittest.TestCase
+- Run: `pytest tests/ -v`
+
+## Directory Structure
+Mirror source layout:
+```
+tests/
+  test_agents/
+    test_market_analyst.py
+    test_trader.py
+  test_dataflows/
+    test_interface.py
+    test_y_finance.py
+  test_graph/
+    test_trading_graph.py
+    test_signal_processing.py
+  test_backtesting/
+    test_engine.py
+  conftest.py          # shared fixtures
+```
+
+## Mocking Rules
+- Always mock LLM calls (`ChatOpenAI.invoke`, `ChatAnthropic.invoke`)
+- Always mock external API calls (yfinance, Alpha Vantage, etc.)
+- Always mock ChromaDB for memory tests
+- Use `unittest.mock.patch` or `pytest-mock`
+
+## Fixtures (conftest.py)
+```python
+@pytest.fixture
+def sample_agent_state():
+    """Provide a minimal valid AgentState for testing."""
+    ...
+
+@pytest.fixture
+def mock_llm():
+    """Provide a mocked LLM that returns predictable responses."""
+    ...
+
+@pytest.fixture
+def sample_config():
+    """Provide a test configuration based on DEFAULT_CONFIG."""
+    ...
+```
+
+## Test Naming
+- `test_<function>_<scenario>_<expected>` pattern
+- Example: `test_process_signal_buy_returns_buy()`

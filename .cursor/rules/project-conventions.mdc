@@ -1,0 +1,43 @@
+---
+description: Core coding standards and conventions for the TradingAgents project
+alwaysApply: true
+---
+
+# TradingAgents Project Conventions
+
+## Language & Runtime
+- Python 3.13, alle neuen Module mit Type Hints (PEP 484)
+- Docstrings im Google-Style für alle öffentlichen Klassen und Funktionen
+- Antworten auf Deutsch, Code und Kommentare auf Englisch
+
+## Architecture
+- LangGraph StateGraph für Agenten-Orchestrierung
+- Alle Konfiguration über `tradingagents/default_config.py` – keine hardcoded Pfade/Werte
+- Vendor-Routing über `tradingagents/dataflows/interface.py` – neue Datenquellen dort registrieren
+- Agenten-Erinnerungen über `FinancialSituationMemory` (ChromaDB + Embeddings)
+
+## Code Quality
+- `logging` statt `print()` für alle Debug-/Info-Ausgaben
+- Keine Secrets im Code – alles über `.env` + `python-dotenv`
+- Fehlerbehandlung: spezifische Exceptions, nie bare `except:`
+
+## Testing
+- pytest für alle Tests, Verzeichnis `tests/`
+- API-Calls und LLM-Calls immer mocken
+- Jedes neue Modul braucht mindestens Unit-Tests
+
+## Dependencies
+- Neue Pakete in `requirements.txt` und `setup.py` eintragen
+- Keine Version-Pins ohne Grund, aber Mindestversionen angeben
+
+## File Organization
+```
+tradingagents/
+  agents/         # LLM-Agenten (Analysten, Researcher, Trader, Risk)
+  dataflows/      # Datenquellen und Vendor-Routing
+  graph/          # LangGraph Workflow-Definition
+  backtesting/    # Backtesting-Engine (neu)
+  portfolio/      # Portfolio-Management (neu)
+tests/            # pytest Tests
+cli/              # CLI-Interface
+```
