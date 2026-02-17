@@ -1,0 +1,114 @@
+---
+description: Git workflow conventions – activated when committing, branching, or creating PRs
+alwaysApply: false
+---
+
+# Git Conventions
+
+## Commit Messages
+
+Format: **Conventional Commits**
+
+```
+type(scope): short imperative description
+
+Optional body with context or motivation.
+```
+
+### Types
+
+| Type | Use for |
+|------|---------|
+| `feat` | New feature or capability |
+| `fix` | Bug fix |
+| `refactor` | Code restructuring without behavior change |
+| `test` | Adding or updating tests |
+| `docs` | Documentation changes |
+| `chore` | Build, deps, config, CI changes |
+| `perf` | Performance improvement |
+
+### Scopes (match module structure)
+
+| Scope | Directory |
+|-------|-----------|
+| `agents` | `tradingagents/agents/` |
+| `dataflows` | `tradingagents/dataflows/` |
+| `graph` | `tradingagents/graph/` |
+| `risk` | `tradingagents/risk/` |
+| `backtesting` | `tradingagents/backtesting/` |
+| `portfolio` | `tradingagents/portfolio/` |
+| `cli` | `cli/` |
+| `config` | `tradingagents/default_config.py` or project config files |
+
+- Scope is optional for cross-cutting changes, but encouraged.
+- Use the most specific scope that fits. If a commit touches two modules, pick the primary one.
+
+### Examples
+
+```
+feat(risk): add position sizing calculator
+fix(dataflows): handle Alpha Vantage rate limit gracefully
+refactor(agents): extract common prompt builder utility
+test(backtesting): add portfolio execution edge case tests
+chore(config): add portfolio management defaults
+docs: update README with backtesting instructions
+```
+
+## Branches
+
+- Feature: `feature/<short-description>` (e.g. `feature/portfolio-rebalancer`)
+- Bugfix: `fix/<short-description>` (e.g. `fix/alpha-vantage-timeout`)
+- Refactor: `refactor/<short-description>`
+- Always branch from `main`
+- Use lowercase and hyphens, no underscores
+
+## Branch Workflow (Feature Branch Workflow)
+
+- Never commit directly to `main` – always work on a feature/fix branch
+- Workflow:
+  1. Create branch from `main`: `git checkout -b feature/<name> main`
+  2. Make commits on the feature branch (follow commit conventions above)
+  3. Push branch to remote: `git push -u origin feature/<name>`
+  4. Create a Pull Request against `main`
+  5. Merge via PR only – prefer **squash merge** for a clean `main` history
+- Keep feature branches short-lived – merge within days, not weeks
+- Pull `main` into your branch regularly to avoid large merge conflicts:
+  `git pull origin main`
+- Delete the branch after merge (remote and local)
+
+## Commit Granularity
+
+- One logical change per commit – keep commits reviewable
+- Feature code and its tests belong in the same commit
+- Config changes for a feature belong in the same commit as the feature
+- Separate refactoring commits from feature commits
+
+## What NOT to Commit
+
+These files must never be committed, even if not yet in `.gitignore`:
+
+- `.env` and any files containing API keys or secrets
+- `results/` output directories
+- `data_cache/` cached vendor data
+- `*.csv` data files
+- `__pycache__/` and `*.pyc`
+- IDE-specific files (`.vscode/`, `.idea/`) except `.cursor/rules/`
+
+If a file is missing from `.gitignore`, add it before committing.
+
+## Pull Requests
+
+- Title follows commit message format: `type(scope): description`
+- Body contains:
+  - **Summary**: 1-3 bullet points describing what changed
+  - **Motivation**: Why this change is needed
+  - **Test plan**: How to verify the changes
+- Keep PRs focused – one feature/fix per PR
+- Reference related issues if applicable
+
+## General Rules
+
+- Never force-push to `main`
+- Never commit with `--no-verify` unless explicitly discussed
+- Review staged changes before every commit (`git diff --staged`)
+- Use imperative mood in commit messages ("add", not "added" or "adds")
