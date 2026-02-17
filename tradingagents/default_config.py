@@ -49,4 +49,7 @@ DEFAULT_CONFIG = {
     "portfolio_min_position_fraction": 0.05,     # Min weight per ticker
     "portfolio_rebalance_threshold": 0.05,       # Drift that triggers rebalancing (5%)
     "portfolio_rebalance_frequency": "weekly",   # "daily", "weekly", or "monthly"
+    # Pipeline settings
+    "pipeline_config_path": "pipeline.yaml",         # Default pipeline config file
+    "pipeline_results_dir": "./results/pipeline",    # Pipeline result storage
 }

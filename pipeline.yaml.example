@@ -1,0 +1,83 @@
+# TradingAgents Pipeline Configuration
+# Copy this file to pipeline.yaml and adjust to your needs.
+#
+# Environment variable substitution: use ${VAR_NAME} syntax.
+# Cron expressions: minute hour day month day_of_week
+#   Examples: "0 9 * * 1-5" = weekdays at 09:00
+#             "30 8 * * 1"  = Mondays at 08:30
+#             "0 */4 * * *" = every 4 hours
+
+results_dir: "./results/pipeline"
+log_level: "INFO"
+max_concurrent_jobs: 1
+
+jobs:
+  # --- Daily single-ticker analysis ---
+  - name: "daily_nvda_analysis"
+    job_type: "single_analysis"
+    tickers: ["NVDA"]
+    analysis_date: "today"
+    schedule:
+      cron_expression: "0 9 * * 1-5"    # Weekdays at 09:00
+      timezone: "Europe/Berlin"
+      enabled: true
+      max_retries: 3
+      retry_delay_seconds: 300
+    notification:
+      enabled: true
+      channels: ["webhook", "log"]
+      webhook_url: "${WEBHOOK_URL}"
+      notify_on: ["success", "failure", "signal_change"]
+    config:
+      llm_provider: "openai"
+      quick_think_llm: "gpt-4o-mini"
+      deep_think_llm: "gpt-4o-mini"
+
+  # --- Weekly portfolio backtest ---
+  - name: "weekly_tech_portfolio"
+    job_type: "portfolio"
+    tickers: ["NVDA", "AAPL", "MSFT", "GOOGL"]
+    analysis_date: "today"
+    schedule:
+      cron_expression: "0 8 * * 1"      # Mondays at 08:00
+      timezone: "Europe/Berlin"
+      enabled: false                     # Disabled by default (costly)
+      max_retries: 2
+      retry_delay_seconds: 600
+    notification:
+      enabled: true
+      channels: ["webhook"]
+      webhook_url: "${WEBHOOK_URL}"
+      notify_on: ["success", "failure"]
+    config:
+      portfolio_weighting_strategy: "equal"
+      portfolio_start_date: "2024-06-03"
+      portfolio_end_date: "2024-06-07"
+      backtest_profile: "quick"
+      backtest_reflection_mode: "none"
+      llm_provider: "openai"
+      quick_think_llm: "gpt-4o-mini"
+      deep_think_llm: "gpt-4o-mini"
+
+  # --- Daily backtest for single ticker ---
+  # - name: "daily_backtest_spy"
+  #   job_type: "backtest"
+  #   tickers: ["SPY"]
+  #   analysis_date: "today"
+  #   schedule:
+  #     cron_expression: "30 9 * * 1-5"
+  #     timezone: "Europe/Berlin"
+  #     enabled: false
+  #     max_retries: 2
+  #     retry_delay_seconds: 300
+  #   notification:
+  #     enabled: false
+  #     channels: ["log"]
+  #     notify_on: ["failure"]
+  #   config:
+  #     backtest_start_date: "2024-06-03"
+  #     backtest_end_date: "2024-06-07"
+  #     backtest_profile: "quick"
+  #     llm_provider: "openai"
+  #     quick_think_llm: "gpt-4o-mini"
+  #     deep_think_llm: "gpt-4o-mini"

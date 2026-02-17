@@ -1,0 +1,28 @@
+# Pipeline validation config — single analysis with minimal LLM cost
+results_dir: "./results/pipeline"
+log_level: "INFO"
+max_concurrent_jobs: 1
+
+jobs:
+  - name: "test_nvda_analysis"
+    job_type: "single_analysis"
+    tickers: ["NVDA"]
+    analysis_date: "2024-06-05"
+    schedule:
+      cron_expression: "0 9 * * 1-5"
+      timezone: "Europe/Berlin"
+      enabled: true
+      max_retries: 2
+      retry_delay_seconds: 5
+    notification:
+      enabled: true
+      channels: ["log"]
+      notify_on: ["success", "failure", "signal_change"]
+    config:
+      llm_provider: "openai"
+      quick_think_llm: "gpt-4o-mini"
+      deep_think_llm: "gpt-4o-mini"
+      backtest_profile: "quick"
+      selected_analysts: ["market"]
+      max_debate_rounds: 1
+      max_risk_discuss_rounds: 1
