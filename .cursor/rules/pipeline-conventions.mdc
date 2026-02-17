@@ -1,0 +1,269 @@
+---
+description: Conventions for the automated pipeline module (scheduler, job runner, notifications, result history)
+globs: tradingagents/pipeline/**/*.py
+alwaysApply: false
+---
+
+# Automated Pipeline Module Conventions
+
+## Purpose
+Automates recurring analysis, backtest, and portfolio runs on a configurable schedule.
+The pipeline sits **above** all existing runners — it is a consumer of
+`TradingAgentsGraph.propagate()`, `BacktestRunner.run()`, and `PortfolioManager.run()`,
+not a modification of them.
+
+## Core Architecture Decision: "Orchestrator above"
+
+- `TradingAgentsGraph`, `BacktestRunner`, and `PortfolioManager` are used as black boxes.
+- No changes to agent graph, backtesting, or portfolio internals.
+- The pipeline adds scheduling, retry logic, result persistence, and notifications.
+- Uses **APScheduler v3** (synchronous `BackgroundScheduler`, stable API).
+- Pipeline config is defined in **YAML** files (`pipeline.yaml`).
+
+## Module Structure
+
+| File | Responsibility |
+|------|---------------|
+| `models.py` | `PipelineConfig`, `JobConfig`, `ScheduleConfig`, `NotificationConfig`, `JobResult` |
+| `scheduler.py` | `PipelineScheduler` — wraps APScheduler, cron/interval triggers |
+| `job_runner.py` | `JobRunner` — executes a single job, delegates to existing runners, retry logic |
+| `result_store.py` | `ResultStore` — persists results as JSON, provides history and comparison |
+| `notifier.py` | `Notifier` — webhook, email, and log-based notifications |
+| `config_loader.py` | `load_pipeline_config()` — reads and validates YAML config |
+| `manager.py` | `PipelineManager` — top-level orchestrator, starts/stops scheduler |
+| `__init__.py` | Public exports |
+
+## Data Structures (`models.py`)
+
+All dataclasses with `@dataclass`, every field type-annotated:
+
+```python
+@dataclass
+class ScheduleConfig:
+    cron_expression: str              # e.g. "0 9 * * 1-5" (weekdays 09:00)
+    timezone: str                     # e.g. "Europe/Berlin"
+    enabled: bool                     # whether this job is active
+    max_retries: int                  # e.g. 3
+    retry_delay_seconds: int          # e.g. 300
+
+@dataclass
+class NotificationConfig:
+    enabled: bool
+    channels: List[str]               # ["webhook", "email", "log"]
+    webhook_url: Optional[str]
+    email_to: Optional[str]
+    smtp_host: Optional[str]
+    smtp_port: int
+    notify_on: List[str]              # ["success", "failure", "signal_change"]
+
+@dataclass
+class JobConfig:
+    name: str                         # unique job identifier
+    job_type: str                     # "single_analysis" | "backtest" | "portfolio"
+    schedule: ScheduleConfig
+    notification: NotificationConfig
+    tickers: List[str]                # ticker list or preset name
+    analysis_date: str                # "today" | "yesterday" | "YYYY-MM-DD"
+    config: Dict[str, Any]            # merged with DEFAULT_CONFIG
+
+@dataclass
+class JobResult:
+    job_name: str
+    job_type: str
+    started_at: datetime
+    finished_at: datetime
+    status: str                       # "success" | "failure" | "partial"
+    duration_seconds: float
+    signal: Optional[str]             # for single_analysis
+    performance: Optional[Dict]       # for backtest/portfolio
+    error: Optional[str]              # error message on failure
+    result_path: str                  # path to saved JSON
+
+@dataclass
+class PipelineConfig:
+    jobs: List[JobConfig]
+    results_dir: str
+    log_level: str                    # "DEBUG" | "INFO" | "WARNING"
+    max_concurrent_jobs: int          # 1 = sequential
+```
+
+## Scheduler (`scheduler.py`)
+
+- Wraps `apscheduler.schedulers.background.BackgroundScheduler`.
+- Each `JobConfig` becomes a `CronTrigger` job.
+- Supports `run_now(job_name)` for immediate one-off execution.
+- Graceful shutdown via `scheduler.shutdown(wait=True)`.
+- Signal handling: catches SIGINT/SIGTERM for clean stop.
+
+```python
+class PipelineScheduler:
+    def __init__(self, config: PipelineConfig, runner: JobRunner, ...): ...
+    def start(self) -> None              # blocks until stopped
+    def stop(self) -> None               # graceful shutdown
+    def run_now(self, job_name: str)      # immediate execution
+    def list_jobs(self) -> List[Dict]     # status of all jobs
+    def next_run(self, job_name) -> datetime
+```
+
+Rules:
+- Never start duplicate jobs (check `scheduler.get_job()`).
+- Log every job start/finish with duration.
+- Thread-safe: APScheduler manages threads internally.
+
+## Job Runner (`job_runner.py`)
+
+- Stateless: receives `JobConfig`, executes, returns `JobResult`.
+- Resolves `analysis_date` ("today" -> current date, "yesterday" -> yesterday).
+- Delegates to the correct runner based on `job_type`:
+  - `single_analysis` -> `TradingAgentsGraph.propagate()`
+  - `backtest` -> `BacktestRunner.run()`
+  - `portfolio` -> `PortfolioManager.run()`
+- Retry logic: exponential backoff up to `max_retries`.
+- On final failure, returns `JobResult(status="failure", error=...)`.
+
+```python
+class JobRunner:
+    def __init__(self, result_store: ResultStore, notifier: Notifier): ...
+    def execute(self, job_config: JobConfig) -> JobResult
+```
+
+Rules:
+- Each `execute()` call is fully self-contained (no shared state between runs).
+- Catch all exceptions — never let a job crash the scheduler.
+- Use `logging` for all output (never `print()`).
+- Lazy-import `TradingAgentsGraph`, `BacktestRunner`, `PortfolioManager` to avoid circular deps.
+
+## Result Store (`result_store.py`)
+
+- File-based JSON storage with timestamped filenames.
+- Directory structure: `{results_dir}/pipeline/{job_name}/{timestamp}.json`.
+- Maintains a `latest.json` copy for quick access.
+- Provides history queries and signal-change detection.
+
+```python
+class ResultStore:
+    def __init__(self, base_dir: str): ...
+    def save(self, result: JobResult) -> str         # returns saved path
+    def get_latest(self, job_name) -> Optional[JobResult]
+    def get_history(self, job_name, limit=30) -> List[JobResult]
+    def has_signal_changed(self, job_name, new_signal: str) -> bool
+```
+
+Rules:
+- Filenames: `{YYYY-MM-DD}_{HHMMSS}.json` (sortable, human-readable).
+- Never delete old results automatically (user manages retention).
+- Handle IO errors gracefully (log warning, don't crash).
+
+## Notifier (`notifier.py`)
+
+- Dispatches notifications based on `NotificationConfig`.
+- Three channels:
+
+| Channel | Implementation |
+|---------|---------------|
+| `log` | `logger.info()` — always available, zero config |
+| `webhook` | HTTP POST to URL (Discord/Slack/Custom) via `requests` |
+| `email` | `smtplib.SMTP` with configurable host/port |
+
+- Trigger conditions (configured via `notify_on`):
+  - `success`: job completed without error
+  - `failure`: job failed after all retries
+  - `signal_change`: signal differs from previous run (detected via `ResultStore`)
+
+```python
+class Notifier:
+    def __init__(self, config: NotificationConfig): ...
+    def notify(self, result: JobResult, signal_changed: bool = False) -> None
+```
+
+Rules:
+- Notification failures must never crash the pipeline (catch + log warning).
+- Webhook payload: JSON with `job_name`, `status`, `signal`, `performance`, `timestamp`.
+- Email subject: `[TradingAgents] {job_name}: {status}`.
+- `log` channel is always active regardless of `channels` setting.
+
+## Config Loader (`config_loader.py`)
+
+- Reads YAML files via `pyyaml`.
+- Validates required fields and types.
+- Merges job-level `config` with `DEFAULT_CONFIG`.
+- Environment variable substitution: `${ENV_VAR}` syntax in YAML values.
+
+```python
+def load_pipeline_config(path: str = "pipeline.yaml") -> PipelineConfig
+```
+
+Rules:
+- Raise `ValueError` with clear message for invalid config (not silent defaults).
+- Support `${WEBHOOK_URL}` style env var references in YAML.
+- Default `timezone` to `"UTC"` if not specified.
+
+## Manager (`manager.py`)
+
+`PipelineManager` is the single entry point for the automated pipeline.
+
+```python
+class PipelineManager:
+    def __init__(self, config_path: str = "pipeline.yaml"): ...
+    def start(self) -> None          # load config, start scheduler (blocking)
+    def stop(self) -> None           # graceful shutdown
+    def run_job(self, job_name: str)  # one-off execution
+    def status(self) -> Dict          # pipeline and job status
+```
+
+Startup flow:
+1. `load_pipeline_config(path)` -> `PipelineConfig`
+2. Create `ResultStore`, `Notifier`, `JobRunner`
+3. Create `PipelineScheduler` with all jobs
+4. `scheduler.start()` (blocks main thread)
+5. On SIGINT/SIGTERM: `scheduler.stop()` -> cleanup
+
+## CLI Integration
+
+New commands in `cli/main.py` (future):
+
+```
+tradingagents pipeline start [--config pipeline.yaml]
+tradingagents pipeline run-now <job-name> [--config pipeline.yaml]
+tradingagents pipeline status [--config pipeline.yaml]
+tradingagents pipeline list-jobs [--config pipeline.yaml]
+```
+
+- `start` is blocking (runs until Ctrl+C or signal).
+- `run-now` executes a single job immediately and exits.
+- `status` shows scheduler state and next run times.
+
+## Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `apscheduler>=3.10` | Cron/interval scheduling |
+| `pyyaml>=6.0` | YAML config parsing |
+| `requests` | Already a dependency (for webhooks) |
+| `smtplib` | Stdlib (for email) |
+
+## Config Keys (added to `default_config.py`)
+
+```python
+# Pipeline settings
+"pipeline_config_path": "pipeline.yaml",
+"pipeline_results_dir": "./results/pipeline",
+```
+
+## What This Module Does NOT Do
+
+- Does NOT modify `TradingAgentsGraph`, `BacktestRunner`, or `PortfolioManager`.
+- Does NOT implement a web dashboard (that's a separate feature).
+- Does NOT manage broker connections or live trading.
+- Does NOT run jobs in separate processes (threads via APScheduler only).
+- Does NOT implement distributed job queues (single-machine only).
+
+## Testing Conventions
+
+- Tests live in `tests/test_pipeline/`.
+- `PipelineScheduler` tested with mock jobs and short intervals.
+- `JobRunner` tested with mocked runners (`BacktestRunner`, `PortfolioManager`).
+- `ResultStore` tested with temp directories and known JSON payloads.
+- `Notifier` tested with mocked HTTP and SMTP (no real network).
+- `config_loader` tested with valid and invalid YAML fixtures.
+- No test should require API keys, network access, or long waits.
