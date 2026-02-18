@@ -34,6 +34,9 @@ dependencies = [
     "yfinance>=0.2.63",
     "apscheduler>=3.10",
     "pyyaml>=6.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "websockets>=14.0",
 ]
 
 [dependency-groups]

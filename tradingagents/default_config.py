@@ -52,4 +52,8 @@ DEFAULT_CONFIG = {
     # Pipeline settings
     "pipeline_config_path": "pipeline.yaml",         # Default pipeline config file
     "pipeline_results_dir": "./results/pipeline",    # Pipeline result storage
+    # Web interface settings
+    "web_host": "127.0.0.1",
+    "web_port": 8000,
+    "web_cors_origins": ["http://localhost:5173"],    # Vite dev server
 }
