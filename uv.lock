@@ -4816,6 +4816,7 @@ dependencies = [
     { name = "chainlit" },
     { name = "chromadb" },
     { name = "eodhd" },
+    { name = "fastapi" },
     { name = "feedparser" },
     { name = "finnhub-python" },
     { name = "grip" },
@@ -4838,6 +4839,8 @@ dependencies = [
     { name = "tqdm" },
     { name = "tushare" },
     { name = "typing-extensions" },
+    { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
     { name = "yfinance" },
 ]
 
@@ -4854,6 +4857,7 @@ requires-dist = [
     { name = "chainlit", specifier = ">=2.5.5" },
     { name = "chromadb", specifier = ">=1.0.12" },
     { name = "eodhd", specifier = ">=1.0.32" },
+    { name = "fastapi", specifier = ">=0.115" },
     { name = "feedparser", specifier = ">=6.0.11" },
     { name = "finnhub-python", specifier = ">=2.4.23" },
     { name = "grip", specifier = ">=4.6.2" },
@@ -4876,6 +4880,8 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "tushare", specifier = ">=1.4.21" },
     { name = "typing-extensions", specifier = ">=4.14.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
+    { name = "websockets", specifier = ">=14.0" },
     { name = "yfinance", specifier = ">=0.2.63" },
 ]
 

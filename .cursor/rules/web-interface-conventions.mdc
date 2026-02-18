@@ -1,0 +1,341 @@
+---
+description: Conventions for the web interface module (FastAPI backend, React frontend, WebSocket streaming)
+globs: tradingagents/web/**/*,tradingagents/web/**/*.py,tradingagents/web/frontend/**/*
+alwaysApply: false
+---
+
+# Web Interface Module Conventions
+
+## Purpose
+Provides a browser-based dashboard for the TradingAgents system — visualizing analysis results,
+backtest performance, portfolio allocations, pipeline status, and risk metrics.
+The web module sits **above** all existing modules — it is a consumer of
+`TradingAgentsGraph`, `BacktestRunner`, `PortfolioManager`, `PipelineManager`, and `ResultStore`.
+
+## Core Architecture Decision: "Thin API Layer"
+
+- Existing modules (`graph`, `backtesting`, `portfolio`, `pipeline`, `risk`) are used as black boxes.
+- No changes to any existing module internals.
+- The web layer adds HTTP endpoints, WebSocket streaming, and a React UI.
+- **FastAPI** backend serves the REST API and WebSocket connections.
+- **React + Vite + TypeScript** frontend, served as static files by FastAPI in production.
+- **No authentication** — designed for local/private network usage.
+
+## Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| Backend | FastAPI | REST API + WebSocket + static file serving |
+| Server | Uvicorn | ASGI server |
+| Validation | Pydantic v2 | Request/response schemas |
+| Frontend | React 18 + TypeScript | SPA UI |
+| Build | Vite | Fast dev server and production builds |
+| Styling | Tailwind CSS | Utility-first CSS |
+| Finance Charts | Lightweight Charts (TradingView) | Equity curves, candlestick charts |
+| Dashboard Charts | Recharts | Bar charts, pie charts, gauges, heatmaps |
+| HTTP Client | fetch (native) | API calls from frontend |
+| WebSocket | native WebSocket API | Live streaming updates |
+
+## Module Structure
+
+### Backend (`tradingagents/web/`)
+
+| File / Dir | Responsibility |
+|------------|---------------|
+| `app.py` | FastAPI application factory, middleware, static file mount |
+| `config.py` | Web-specific configuration (host, port, CORS) |
+| `dependencies.py` | FastAPI dependency injection (shared instances) |
+| `routers/__init__.py` | Router registration |
+| `routers/analysis.py` | `POST /api/analysis/run`, `GET /api/analysis/{ticker}/{date}` |
+| `routers/backtest.py` | `POST /api/backtest/run`, `GET /api/backtest/{id}` |
+| `routers/portfolio.py` | `POST /api/portfolio/run`, `GET /api/portfolio/{id}` |
+| `routers/pipeline.py` | `GET /api/pipeline/status`, `POST /api/pipeline/run-now/{job}` |
+| `routers/results.py` | `GET /api/results/{ticker}`, `GET /api/results/pipeline/{job}` |
+| `routers/risk.py` | `GET /api/risk/{ticker}/{date}` |
+| `schemas/requests.py` | Pydantic request models |
+| `schemas/responses.py` | Pydantic response models |
+| `services/task_manager.py` | Background task management (asyncio + threading) |
+| `services/result_reader.py` | Reads persisted results from disk |
+| `websocket/stream.py` | WebSocket handler for live agent progress |
+
+### Frontend (`tradingagents/web/frontend/`)
+
+| Dir | Responsibility |
+|-----|---------------|
+| `src/api/` | API client functions (typed fetch wrappers) |
+| `src/components/Layout/` | Sidebar, Header, Navigation shell |
+| `src/components/Dashboard/` | Overview cards, status widgets, quick actions |
+| `src/components/Analysis/` | Analysis form, report viewer, debate viewer |
+| `src/components/Backtest/` | Equity chart, trade table, performance KPIs |
+| `src/components/Portfolio/` | Allocation pie, correlation heatmap, per-ticker bars |
+| `src/components/Pipeline/` | Job list, execution log, signal history |
+| `src/components/Risk/` | Risk metric gauges, VaR visualization |
+| `src/components/common/` | Buttons, Cards, Tables, Loading, StatusBadge |
+| `src/hooks/` | `useWebSocket`, `useApi`, `useInterval` |
+| `src/pages/` | Route page components (one per dashboard section) |
+| `src/types/` | TypeScript interfaces mirroring backend schemas |
+| `src/utils/` | Number formatters, date helpers, color scales |
+
+## API Design Conventions
+
+### URL Structure
+- All API routes under `/api/` prefix.
+- Resource-oriented: `/api/{module}/{action_or_id}`.
+- Use kebab-case for multi-word paths: `/api/pipeline/run-now`.
+
+### HTTP Methods
+- `GET` for reading data (results, status, history).
+- `POST` for triggering actions (run analysis, start backtest).
+- No `PUT`/`DELETE` needed (no persistent entities to update/remove).
+
+### Response Format
+Every response follows a consistent envelope:
+
+```python
+class ApiResponse(BaseModel, Generic[T]):
+    success: bool
+    data: Optional[T] = None
+    error: Optional[str] = None
+    timestamp: str  # ISO 8601
+```
+
+### Long-Running Tasks
+Analysis, backtest, and portfolio runs take minutes to hours.
+Pattern: **fire-and-forget + polling/WebSocket**.
+
+1. `POST /api/backtest/run` → returns `{ task_id: str, status: "running" }` immediately.
+2. Client connects to `ws://host/ws/stream/{task_id}` for live progress.
+3. `GET /api/backtest/{task_id}` for polling fallback.
+4. Task results are persisted via existing `ResultStore` / file system.
+
+### Error Handling
+- HTTP 400 for invalid request parameters (Pydantic validation).
+- HTTP 404 for unknown task/result IDs.
+- HTTP 500 for unexpected server errors.
+- Always return JSON error body, never HTML error pages.
+
+## WebSocket Conventions (`websocket/stream.py`)
+
+- Endpoint: `ws://host/ws/stream/{task_id}`.
+- Server sends JSON messages with progress updates:
+
+```json
+{
+  "type": "progress",
+  "task_id": "abc123",
+  "step": "market_analyst",
+  "status": "running",
+  "message": "Market Analyst analyzing NVDA...",
+  "progress_percent": 25
+}
+```
+
+- Message types: `progress`, `agent_output`, `result`, `error`, `complete`.
+- Client can send `{ "type": "cancel" }` to request task cancellation.
+- Heartbeat: server sends `{ "type": "ping" }` every 30 seconds.
+- On disconnect, background task continues — client can reconnect.
+
+## Background Task Manager (`services/task_manager.py`)
+
+- Manages long-running tasks (analysis, backtest, portfolio) in background threads.
+- Each task gets a unique UUID (`task_id`).
+- Tasks run existing module code in a `ThreadPoolExecutor` (LLM calls are blocking I/O).
+- Thread-safe status dict: `{ task_id: { status, progress, result } }`.
+- Completed results are moved to disk, in-memory state is cleaned after 1 hour.
+
+```python
+class TaskManager:
+    def submit(self, task_type: str, config: dict) -> str  # returns task_id
+    def get_status(self, task_id: str) -> dict
+    def cancel(self, task_id: str) -> bool
+    def get_result(self, task_id: str) -> Optional[dict]
+```
+
+Rules:
+- Max concurrent tasks configurable (default: 2).
+- Never block the FastAPI event loop — all heavy work in threads.
+- Use `logging` for all output (never `print()`).
+
+## Pydantic Schemas (`schemas/`)
+
+### Request Models (`requests.py`)
+
+```python
+class AnalysisRequest(BaseModel):
+    ticker: str
+    analysis_date: str  # "YYYY-MM-DD"
+    selected_analysts: list[str] = ["market", "fundamentals"]
+    llm_provider: str = "openai"
+
+class BacktestRequest(BaseModel):
+    ticker: str
+    start_date: str
+    end_date: str
+    initial_capital: float = 100_000
+    backtest_profile: str = "quick"
+    reflection_mode: str = "none"
+
+class PortfolioRequest(BaseModel):
+    tickers: list[str]
+    start_date: str
+    end_date: str
+    initial_capital: float = 100_000
+    weighting_strategy: str = "equal"
+    backtest_profile: str = "quick"
+```
+
+### Response Models (`responses.py`)
+- Mirror the existing dataclasses (`RiskMetrics`, `BacktestResult`, `PortfolioResult`, `JobResult`).
+- Use Pydantic `model_from_dataclass()` or manual mapping.
+- All float percentages remain as decimals (frontend formats for display).
+
+## Frontend Conventions
+
+### Component Pattern
+- Functional components only (no class components).
+- One component per file, filename matches component name: `EquityChart.tsx`.
+- Props interface defined above the component in the same file.
+- Use custom hooks for data fetching and WebSocket connections.
+
+### State Management
+- React Context for global state (active tasks, pipeline status).
+- `useState` / `useReducer` for local component state.
+- No Redux — project scope doesn't justify it.
+
+### Styling
+- Tailwind CSS utility classes, no separate CSS files.
+- Dark theme by default (trading dashboards convention).
+- Consistent color palette: green for BUY/profit, red for SELL/loss, gray for HOLD/neutral.
+
+### Charting Rules
+- **Lightweight Charts** for: equity curves, price charts, portfolio value over time.
+- **Recharts** for: performance bar charts, allocation pie charts, risk gauge charts.
+- Charts must be responsive (resize with container).
+- Show loading skeleton while data is fetching.
+- All charts include tooltips with formatted values.
+
+### TypeScript Interfaces
+- Mirror backend Pydantic schemas exactly (same field names, same types).
+- Keep in `src/types/` directory, one file per module (`backtest.ts`, `portfolio.ts`, etc.).
+- Use `number` for all numeric types (no `int` vs `float` distinction).
+
+### Routing (React Router)
+```
+/                    → Dashboard (overview)
+/analysis            → Analysis page
+/analysis/:id        → Analysis result detail
+/backtest            → Backtest page
+/backtest/:id        → Backtest result detail
+/portfolio           → Portfolio page
+/portfolio/:id       → Portfolio result detail
+/pipeline            → Pipeline status and jobs
+/risk/:ticker/:date  → Risk metrics detail
+```
+
+## FastAPI Application (`app.py`)
+
+```python
+def create_app() -> FastAPI:
+    app = FastAPI(title="TradingAgents Dashboard", version="1.0.0")
+    
+    # CORS (allow local dev server)
+    app.add_middleware(CORSMiddleware, allow_origins=["*"], ...)
+    
+    # API routers
+    app.include_router(analysis_router, prefix="/api/analysis")
+    app.include_router(backtest_router, prefix="/api/backtest")
+    ...
+    
+    # WebSocket
+    app.add_websocket_route("/ws/stream/{task_id}", websocket_handler)
+    
+    # Static files (production: serve built React app)
+    app.mount("/", StaticFiles(directory="web/frontend/dist", html=True))
+    
+    return app
+```
+
+Rules:
+- Application factory pattern (`create_app()`) for testability.
+- Static file mount is LAST (catch-all for SPA routing).
+- Lifespan handler for startup/shutdown (initialize TaskManager, cleanup).
+
+## CLI Integration
+
+New command in `cli/main.py`:
+
+```
+tradingagents web start [--host 0.0.0.0] [--port 8000] [--dev]
+```
+
+- `--dev`: enables auto-reload and CORS for Vite dev server (port 5173).
+- Without `--dev`: serves pre-built frontend from `frontend/dist/`.
+- Uses `uvicorn.run()` programmatically.
+
+## Dependencies
+
+### Backend (added to `pyproject.toml`)
+
+| Package | Purpose |
+|---------|---------|
+| `fastapi>=0.115` | Web framework |
+| `uvicorn[standard]>=0.34` | ASGI server |
+| `websockets>=14.0` | WebSocket support |
+
+Note: Pydantic v2 is already a transitive dependency of FastAPI.
+
+### Frontend (`tradingagents/web/frontend/package.json`)
+
+| Package | Purpose |
+|---------|---------|
+| `react`, `react-dom` | UI framework |
+| `react-router-dom` | Client-side routing |
+| `lightweight-charts` | TradingView finance charts |
+| `recharts` | Dashboard charts |
+| `tailwindcss` | Utility CSS |
+| `typescript` | Type safety |
+| `vite` | Build tool and dev server |
+
+## Config Keys (added to `default_config.py`)
+
+```python
+# Web interface settings
+"web_host": "127.0.0.1",
+"web_port": 8000,
+"web_cors_origins": ["http://localhost:5173"],  # Vite dev server
+```
+
+## Build & Serve Flow
+
+### Development
+1. `tradingagents web start --dev` → starts FastAPI on :8000 with auto-reload.
+2. `cd tradingagents/web/frontend && npm run dev` → starts Vite on :5173.
+3. Frontend proxies `/api/*` and `/ws/*` to :8000 via Vite config.
+
+### Production
+1. `cd tradingagents/web/frontend && npm run build` → outputs to `dist/`.
+2. `tradingagents web start` → FastAPI serves API + static `dist/` files on :8000.
+3. Single port, single process, no reverse proxy needed.
+
+## What This Module Does NOT Do
+
+- Does NOT modify `TradingAgentsGraph`, `BacktestRunner`, `PortfolioManager`, or `PipelineManager`.
+- Does NOT implement authentication (designed for local/trusted network use).
+- Does NOT implement a database (reads existing file-based results).
+- Does NOT replace the CLI (both interfaces coexist).
+- Does NOT implement server-side rendering (pure SPA with client-side routing).
+- Does NOT manage broker connections or live trading.
+
+## Testing Conventions
+
+### Backend Tests (`tests/test_web/`)
+- Use `httpx.AsyncClient` with FastAPI's `TestClient` for endpoint tests.
+- Mock all heavy operations (`TradingAgentsGraph.propagate()`, `BacktestRunner.run()`).
+- Test WebSocket connections with `websockets` test client.
+- Test `TaskManager` with short-lived mock tasks.
+- No test should require API keys, network access, or a running frontend.
+
+### Frontend Tests
+- Component tests with Vitest + React Testing Library (optional, lower priority).
+- TypeScript strict mode (`strict: true` in `tsconfig.json`) catches type errors at build time.
+- Primary validation via manual browser testing during development.

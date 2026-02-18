@@ -10,3 +10,7 @@ eval_data/
 *.egg-info/
 .env
 *.json
+
+# Frontend build artifacts
+node_modules/
+tradingagents/web/frontend/dist/
