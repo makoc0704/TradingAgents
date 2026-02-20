@@ -56,4 +56,11 @@ DEFAULT_CONFIG = {
     "web_host": "127.0.0.1",
     "web_port": 8000,
     "web_cors_origins": ["http://localhost:5173"],    # Vite dev server
+    # Live trading settings
+    "live_mode": "paper",                        # "dry_run" | "paper" | "live" (future)
+    "live_broker_type": "dummy",                 # "dummy" | "alpaca" | "ib" (future)
+    "live_state_path": "results/live/state.json",
+    "live_initial_capital": 200.0,               # Starting capital
+    "live_commission_rate": 0.001,               # Commission per trade (0.1%)
+    "live_slippage_rate": 0.0005,                # Slippage per trade (0.05%)
 }

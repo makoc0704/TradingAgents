@@ -115,6 +115,8 @@ class JobRunner:
             return self._run_backtest(job_config, started)
         elif job_type == "portfolio":
             return self._run_portfolio(job_config, started)
+        elif job_type == "live_trading":
+            return self._run_live_trading(job_config, started)
         else:
             raise ValueError(f"Unknown job_type: '{job_type}'")
 
@@ -258,4 +260,47 @@ class JobRunner:
             duration_seconds=(finished - started).total_seconds(),
             signal=signal_summary,
             performance=result.performance,
+        )
+
+    def _run_live_trading(
+        self, job_config: JobConfig, started: datetime,
+    ) -> JobResult:
+        """Run live trading via LiveRunner."""
+        from tradingagents.live import LiveRunner, LiveConfig
+
+        effective_config = self._build_config(job_config)
+
+        live_config = LiveConfig(
+            tickers=job_config.tickers,
+            mode=effective_config.get("live_mode", "paper"),
+            broker_type=effective_config.get("live_broker_type", "dummy"),
+            state_path=effective_config.get("live_state_path", "results/live/state.json"),
+            initial_capital=effective_config.get("live_initial_capital", 200.0),
+            commission_rate=effective_config.get("live_commission_rate", 0.001),
+            slippage_rate=effective_config.get("live_slippage_rate", 0.0005),
+            selected_analysts=effective_config.get(
+                "selected_analysts", ["market", "fundamentals"]
+            ),
+            backtest_profile=effective_config.get("backtest_profile", "standard"),
+            config=effective_config,
+        )
+
+        result = LiveRunner(live_config).run()
+
+        # Extract signal summary
+        signal_summary = ", ".join(
+            f"{ticker}={signal.action}"
+            for ticker, signal in result.signals.items()
+        )
+
+        finished = datetime.now()
+        return JobResult(
+            job_name=job_config.name,
+            job_type=job_config.job_type,
+            started_at=started,
+            finished_at=finished,
+            status="success",
+            duration_seconds=(finished - started).total_seconds(),
+            signal=signal_summary,
+            performance=result.performance_metrics,
         )

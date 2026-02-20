@@ -55,7 +55,7 @@ class JobConfig:
 
     Attributes:
         name: Unique job identifier.
-        job_type: Type — "single_analysis", "backtest", or "portfolio".
+        job_type: Type — "single_analysis", "backtest", "portfolio", or "live_trading".
         schedule: Schedule configuration.
         notification: Notification configuration.
         tickers: Ticker symbols or universe preset name.

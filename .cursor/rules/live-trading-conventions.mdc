@@ -1,0 +1,310 @@
+---
+description: Conventions for the live trading module (live runner, broker interface, persistent state, paper trading)
+globs: tradingagents/live/**/*.py
+alwaysApply: false
+---
+
+# Live Trading Module Conventions
+
+## Purpose
+Enables live paper trading with persistent state using current market data.
+The live module orchestrates `TradingAgentsGraph.propagate()` with today's date and executes
+signals via a broker interface (currently `DummyBroker` for paper trading).
+This allows testing strategies with live data over extended periods (e.g., one month daily).
+
+## Core Architecture Decision: "Broker Interface Pattern"
+
+- **Broker-Interface-Architektur**: `LiveRunner` knows only `BrokerInterface`, not implementations.
+- **Dummy-Broker**: Current implementation uses `DummyBroker` for paper trading with persistent state.
+- **Future-proof**: Real brokers (Alpaca, IB, CCXT) can replace `DummyBroker` without changing `LiveRunner`.
+- **Persistent State**: Unlike backtesting (ephemeral per run), live trading maintains state across runs.
+- **Consumer Pattern**: Live module is a **consumer** of `propagate()`, not a modification of it.
+
+## Module Structure
+
+| File | Responsibility |
+|------|---------------|
+| `__init__.py` | Public API: `LiveConfig`, `LiveRunner`, `BrokerInterface`, `DummyBroker` |
+| `models.py` | `LiveConfig`, `LiveRunResult`, `PortfolioSnapshot` |
+| `runner.py` | `LiveRunner` — orchestrates graph propagation with current date, executes via broker |
+| `state.py` | `LivePortfolioState` — persistent portfolio state (cash, positions, trade history) |
+| `performance.py` | `calculate_live_performance()` — performance metrics over time (reuses `risk.metrics`) |
+| `broker/interface.py` | `BrokerInterface` (ABC) — abstract broker contract |
+| `broker/dummy.py` | `DummyBroker` — paper trading implementation with persistent state |
+
+## Data Structures (`models.py`)
+
+All dataclasses with `@dataclass`, every field type-annotated:
+
+```python
+@dataclass
+class LiveConfig:
+    tickers: List[str]                    # e.g. ["NVDA", "AAPL", "MSFT"]
+    mode: str                             # "dry_run" | "paper" | "live" (future)
+    broker_type: str                      # "dummy" | "alpaca" | "ib" (future)
+    state_path: str                        # Path to persistent state JSON
+    initial_capital: float                 # e.g. 200.0 (EUR/USD)
+    commission_rate: float                 # e.g. 0.001
+    slippage_rate: float                   # e.g. 0.0005
+    selected_analysts: List[str]           # e.g. ["market", "fundamentals"]
+    backtest_profile: str                  # "full" | "standard" | "quick"
+    config: Dict[str, Any]                  # full DEFAULT_CONFIG passthrough
+
+@dataclass
+class LiveRunResult:
+    date: str                              # "YYYY-MM-DD" (always current date)
+    signals: Dict[str, TradeSignal]        # Signal per ticker
+    executed_orders: List[OrderResult]     # What was executed (empty if dry_run)
+    portfolio_snapshot: Dict[str, float]   # Cash, positions, total_value
+    daily_return: float                    # Return since yesterday
+    cumulative_return: float               # Return since start
+    performance_metrics: Dict[str, float] # Sharpe, drawdown, etc.
+
+@dataclass
+class PortfolioSnapshot:
+    date: str
+    cash: float
+    positions: Dict[str, Position]         # {ticker: Position}
+    total_value: float
+    daily_return: float
+    cumulative_return: float
+```
+
+## Broker Interface (`broker/interface.py`)
+
+**Abstract base class** defining the contract for all broker implementations:
+
+```python
+class BrokerInterface(ABC):
+    @abstractmethod
+    def place_order(
+        self,
+        ticker: str,
+        signal: TradeSignal,
+        current_price: float,
+        date: str,
+    ) -> OrderResult:
+        """Place an order based on a trade signal."""
+        pass
+    
+    @abstractmethod
+    def get_positions(self) -> List[Position]:
+        """Get all current positions."""
+        pass
+    
+    @abstractmethod
+    def get_cash(self) -> float:
+        """Get current cash balance."""
+        pass
+    
+    @abstractmethod
+    def get_last_price(self, ticker: str) -> float:
+        """Get last known price for a ticker."""
+        pass
+    
+    @abstractmethod
+    def get_portfolio_value(self) -> float:
+        """Get total portfolio value (cash + positions)."""
+        pass
+```
+
+**Rules:**
+- All broker implementations must inherit from `BrokerInterface`.
+- `LiveRunner` only knows `BrokerInterface`, never concrete implementations.
+- Broker implementations are swappable without changing `LiveRunner` code.
+
+## Dummy Broker (`broker/dummy.py`)
+
+**Paper trading implementation** with persistent state:
+
+- Uses same execution logic as `backtesting/portfolio.py` (slippage, commission).
+- **Key difference**: State is **persistent** (via `LivePortfolioState`), not ephemeral.
+- Reads/writes state from `state.py` on every operation.
+- Never allows negative cash (skip buy if insufficient funds).
+- Whole shares only (`int`), monetary values as `float`.
+
+**Execution Flow:**
+1. `place_order()` receives `TradeSignal` + current price.
+2. Calculate execution price (apply slippage: buy pushes up, sell pushes down).
+3. Calculate shares (based on `signal.position_size.fraction`).
+4. Update persistent state (`state.add_position()`, `state.subtract_cash()`).
+5. Record trade in history (`state.record_trade()`).
+6. Return `OrderResult` with execution details.
+
+**Price Fetching:**
+- `get_last_price()` fetches from data vendor (yfinance/Alpha Vantage) for paper trading.
+- Real brokers would use their own price feed.
+
+## Persistent State (`state.py`)
+
+**Manages portfolio state across runs:**
+
+- State stored as JSON file (default: `results/live/state.json`).
+- Loaded at start of each run, saved after every trade.
+- Structure:
+  ```json
+  {
+    "cash": 180.50,
+    "positions": {
+      "NVDA": {"shares": 2, "avg_entry_price": 82.75}
+    },
+    "trades": [
+      {"date": "2025-02-19", "ticker": "NVDA", "action": "BUY", ...}
+    ],
+    "initialized_at": "2025-02-01T09:00:00"
+  }
+  ```
+
+**Rules:**
+- State file must be **atomic** (write to temp file, then rename).
+- Handle file corruption gracefully (log error, initialize fresh state).
+- Keep trade history bounded (last 1000 trades) to prevent file bloat.
+- State is **single-threaded** (Pipeline ensures sequential runs).
+
+## Live Runner (`runner.py`)
+
+**Orchestrates live trading execution:**
+
+- `LiveRunner` is the single entry point.
+- Constructor takes `LiveConfig`, internally creates `TradingAgentsGraph` and broker.
+- Main `run()` method:
+  1. Get current date via `get_current_date()`.
+  2. Load persistent state (`LivePortfolioState`).
+  3. Initialize broker with state.
+  4. For each ticker:
+     - `graph.propagate(ticker, today)` → `TradeSignal`.
+     - Fetch current price (yfinance/Alpha Vantage).
+     - If `mode == "paper"`: `broker.place_order(...)`.
+     - If `mode == "dry_run"`: log signal only, no execution.
+  5. Calculate performance snapshot.
+  6. Save state (broker handles this internally).
+  7. Return `LiveRunResult`.
+
+**Rules:**
+- Must handle `propagate()` failures gracefully (log warning, treat as HOLD).
+- Never modify `TradingAgentsGraph` internals.
+- Use `logging` (never `print()`).
+- Each run is **idempotent** (running twice on same day should be safe, but log warning).
+
+## Performance Tracking (`performance.py`)
+
+**Calculates performance metrics over time:**
+
+- **Reuses** functions from `tradingagents.risk.metrics` (Sharpe, Sortino, max drawdown).
+- Do NOT duplicate calculation logic — import and compose.
+- Input: List of `LiveRunResult` (daily snapshots) + initial capital.
+- Output: Dict with `total_return`, `daily_return`, `sharpe_ratio`, `max_drawdown`, `win_rate`, etc.
+- All functions are pure (no side effects).
+
+**Daily Snapshots:**
+- Each `LiveRunResult` includes a `PortfolioSnapshot`.
+- Snapshots are stored in Pipeline result files (`results/pipeline/live_trading/`).
+- Performance calculation aggregates snapshots over time.
+
+## Integration Points
+
+- `LiveRunner` imports `TradingAgentsGraph` from `tradingagents.graph.trading_graph`.
+- `DummyBroker.place_order()` reads `TradeSignal.position_size.fraction` from `tradingagents.risk.models`.
+- `performance.py` imports from `tradingagents.risk.metrics`.
+- `state.py` uses `get_current_date()` from `tradingagents.dataflows.utils`.
+- Pipeline `JobRunner` calls `LiveRunner.run()` for `job_type == "live_trading"`.
+- CLI gets `live run` and `live status` commands in `cli/main.py`.
+- Web API gets `/api/live/run` and `/api/live/status` endpoints.
+
+## Config Keys (added to `default_config.py`)
+
+```python
+# Live trading settings
+"live_mode": "paper",                        # "dry_run" | "paper" | "live" (future)
+"live_broker_type": "dummy",                 # "dummy" | "alpaca" | "ib" (future)
+"live_state_path": "results/live/state.json",
+"live_initial_capital": 200.0,               # Starting capital
+"live_commission_rate": 0.001,               # Commission per trade (0.1%)
+"live_slippage_rate": 0.0005,                # Slippage per trade (0.05%)
+```
+
+## Pipeline Integration
+
+**New job type**: `job_type: "live_trading"` in `pipeline/models.py`.
+
+**Pipeline YAML example:**
+```yaml
+jobs:
+  - name: "live_paper_trading"
+    job_type: "live_trading"
+    tickers: ["NVDA", "AAPL", "MSFT"]
+    analysis_date: "today"  # Always current date
+    schedule:
+      cron_expression: "0 9 * * 1-5"  # Weekdays 09:00
+      timezone: "Europe/Berlin"
+      enabled: true
+    config:
+      live_mode: "paper"
+      live_broker_type: "dummy"
+      live_initial_capital: 200
+```
+
+**JobRunner Integration:**
+- `JobRunner._run_live_trading()` builds `LiveConfig` from `JobConfig`.
+- Instantiates `LiveRunner` with config.
+- Calls `runner.run()`, returns `JobResult` with `LiveRunResult` data.
+- Results saved via `ResultStore` (same as other job types).
+
+## Modes
+
+| Mode | Behavior | State Changes |
+|------|----------|--------------|
+| `dry_run` | Only log signals, no execution | State unchanged |
+| `paper` | Execute via `DummyBroker`, update state | State persisted |
+| `live` | Future: execute via real broker | State from broker API |
+
+## State Persistence vs Backtesting
+
+**Key Differences:**
+
+| Aspect | Backtesting | Live Trading |
+|--------|------------|--------------|
+| State Lifetime | Ephemeral (per run) | Persistent (across runs) |
+| Date Range | Historical (start → end) | Current date only |
+| Execution | In-memory `Portfolio` | Persistent `LivePortfolioState` |
+| Use Case | Test strategy on past data | Test strategy with live data over time |
+
+**Similarities:**
+- Same execution logic (slippage, commission, whole shares).
+- Same `TradeSignal` format from graph.
+- Same performance metrics calculation.
+
+## Testing Conventions
+
+- Tests live in `tests/test_live/`.
+- `LivePortfolioState` tested with temp JSON files (cleanup after).
+- `DummyBroker` tested with deterministic price sequences (no API calls).
+- `LiveRunner` tests mock `TradingAgentsGraph.propagate()` to avoid LLM calls.
+- `performance.py` tests use synthetic `LiveRunResult` lists with known expected results.
+- No test should require API keys, network access, or real broker connections.
+- State file operations must be tested for atomicity and corruption handling.
+
+## What This Module Does NOT Do
+
+- Does NOT modify `TradingAgentsGraph`, `BacktestRunner`, or `PortfolioManager`.
+- Does NOT implement real broker connections (only `DummyBroker` for now).
+- Does NOT implement authentication or API keys for brokers (future work).
+- Does NOT implement order cancellation or modification (orders execute immediately).
+- Does NOT implement multi-threaded execution (Pipeline ensures sequential runs).
+- Does NOT implement real-time price streaming (fetches price on-demand per run).
+
+## Future Extensions
+
+**Phase 2 (Real Brokers):**
+- `broker/alpaca.py`: Alpaca API implementation.
+- `broker/ccxt.py`: CCXT library wrapper for multiple exchanges.
+- `broker/interactive_brokers.py`: IB API implementation.
+- Each implements `BrokerInterface`, swaps into `LiveRunner` via config.
+
+**Phase 3 (Advanced Features):**
+- Order cancellation/modification.
+- Real-time price streaming.
+- Multi-threaded execution (parallel ticker analysis).
+- Risk limits (max position size, stop-loss orders).
+
+Consider these rules if they affect your changes.
