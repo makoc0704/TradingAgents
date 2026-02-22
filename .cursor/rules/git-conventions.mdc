@@ -83,6 +83,43 @@ docs: update README with backtesting instructions
 - Config changes for a feature belong in the same commit as the feature
 - Separate refactoring commits from feature commits
 
+## Commit Frequency – commit regularly, not just at the end
+
+When implementing a feature or fixing a bug, commit **after each logical sub-step**.
+
+### When to commit during development
+
+- After scaffolding a new module or file structure
+- After implementing a self-contained function or class
+- After writing tests for a unit
+- After fixing a single bug (one bug = one commit)
+- After a refactoring step that leaves the code in a working state
+
+### Expected rhythm
+
+For a typical feature, expect **3–6 commits**, for example:
+
+```
+feat(web): add live router skeleton
+test(web): add unit tests for live router
+feat(web): implement SSE stream endpoint
+feat(web): wire live router into app
+```
+
+### What NOT to do
+
+- ❌ One giant commit at the end covering the entire feature
+- ❌ Commits with mixed concerns (feature + unrelated refactor + config)
+- ❌ Committing broken/non-passing code (except WIP commits on feature branches)
+
+### WIP commits (optional)
+
+To save progress mid-implementation, use a `wip:` prefix and squash before merging:
+
+```
+wip: half-done SSE stream (do not merge)
+```
+
 ## What NOT to Commit
 
 These files must never be committed, even if not yet in `.gitignore`:

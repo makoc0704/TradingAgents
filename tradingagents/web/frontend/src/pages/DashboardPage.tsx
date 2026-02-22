@@ -1,37 +1,72 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  Activity,
+  Search,
+  TrendingUp,
+  Briefcase,
+  ExternalLink,
+} from "lucide-react";
 import Card from "../components/common/Card";
 import MetricCard from "../components/common/MetricCard";
 import StatusBadge from "../components/common/StatusBadge";
-import Loading from "../components/common/Loading";
-import { listTickers, getPipelineStatus } from "../api/client";
-import type { PipelineStatus } from "../types";
+import EmptyState from "../components/common/EmptyState";
+import Skeleton, { SkeletonCard } from "../components/common/Skeleton";
+import SparkLine from "../components/charts/SparkLine";
+import {
+  listTickers,
+  getPipelineStatus,
+  getLivePortfolio,
+  getLiveHistory,
+} from "../api/client";
+import { formatCurrency, formatPercent } from "../utils/format";
+import type { PipelineStatus, LivePortfolio, LiveRunSnapshot } from "../types";
 
 export default function DashboardPage() {
   const [tickers, setTickers] = useState<string[]>([]);
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
+  const [portfolio, setPortfolio] = useState<LivePortfolio | null>(null);
+  const [equityHistory, setEquityHistory] = useState<LiveRunSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
-      const [tickerRes, pipelineRes] = await Promise.all([
+      const [tickerRes, pipelineRes, portfolioRes, historyRes] = await Promise.all([
         listTickers(),
         getPipelineStatus(),
+        getLivePortfolio(),
+        getLiveHistory(),
       ]);
       if (tickerRes.success && tickerRes.data) setTickers(tickerRes.data);
-      if (pipelineRes.success && pipelineRes.data)
-        setPipeline(pipelineRes.data);
+      if (pipelineRes.success && pipelineRes.data) setPipeline(pipelineRes.data);
+      if (portfolioRes.success && portfolioRes.data) setPortfolio(portfolioRes.data);
+      if (historyRes.success && historyRes.data) setEquityHistory(historyRes.data);
       setLoading(false);
     }
     load();
   }, []);
 
-  if (loading) return <Loading message="Dashboard laden..." />;
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton height="h-8" className="w-1/4" />
+        <div className="grid grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+        <SkeletonCard />
+      </div>
+    );
+  }
+
+  const sparkData = equityHistory.map((s) => ({ time: s.date, value: s.portfolio_value }));
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-100">Dashboard</h1>
+    <div className="space-y-6 animate-fade-in">
+      <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Dashboard</h1>
 
-      {/* Quick Stats */}
+      {/* Hero Stats */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           label="Analysierte Ticker"
@@ -44,46 +79,94 @@ export default function DashboardPage() {
           subtext={`${pipeline?.enabled_jobs ?? 0} aktiv`}
         />
         <MetricCard
-          label="Status"
+          label="Pipeline"
           value={pipeline?.running ? "Running" : "Stopped"}
-          color={pipeline?.running ? "text-emerald-400" : "text-gray-400"}
+          trend={pipeline?.running ? "up" : "neutral"}
         />
         <MetricCard
           label="System"
           value="Online"
-          color="text-emerald-400"
+          trend="up"
           subtext="API erreichbar"
         />
       </div>
 
-      {/* Recent Tickers */}
+      {/* Live Portfolio Hero */}
+      {portfolio && (
+        <Card gradient>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                Live Portfolio
+              </div>
+              <div className="mt-1 text-3xl font-bold font-mono" style={{ color: "var(--text-primary)" }}>
+                {formatCurrency(portfolio.total_value)}
+              </div>
+              <div className="mt-1 flex items-center gap-3">
+                <span className={`text-sm font-medium ${portfolio.total_return >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {formatPercent(portfolio.total_return)} gesamt
+                </span>
+                <span className={`text-sm ${portfolio.daily_return >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {formatPercent(portfolio.daily_return)} heute
+                </span>
+              </div>
+            </div>
+            {sparkData.length > 1 && (
+              <SparkLine
+                data={sparkData}
+                color={portfolio.total_return >= 0 ? "#34d399" : "#f87171"}
+                width={160}
+                height={50}
+              />
+            )}
+          </div>
+          <div className="mt-4">
+            <Link
+              to="/live"
+              className="inline-flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Zum Live Trading
+            </Link>
+          </div>
+        </Card>
+      )}
+
+      {/* Analysed Tickers */}
       <Card title="Analysierte Ticker">
         {tickers.length === 0 ? (
-          <p className="text-gray-500">
-            Noch keine Analyseergebnisse vorhanden. Starte eine Analyse ueber
-            die Analyse-Seite.
-          </p>
+          <EmptyState
+            icon={Search}
+            title="Noch keine Analysen"
+            description="Starte eine Analyse, um Ticker-Ergebnisse zu sehen."
+          />
         ) : (
           <div className="flex flex-wrap gap-2">
             {tickers.map((t) => (
-              <span
+              <Link
                 key={t}
-                className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-200"
+                to={`/history`}
+                className="rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors hover:border-[var(--border-hover)]"
+                style={{
+                  background: "var(--bg-primary)",
+                  borderColor: "var(--border)",
+                  color: "var(--text-primary)",
+                }}
               >
                 {t}
-              </span>
+              </Link>
             ))}
           </div>
         )}
       </Card>
 
-      {/* Pipeline Jobs Overview */}
+      {/* Pipeline Jobs */}
       {pipeline && pipeline.jobs.length > 0 && (
         <Card title="Pipeline Jobs">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800 text-left text-gray-500">
+                <tr className="border-b text-left" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
                   <th className="pb-3 font-medium">Job</th>
                   <th className="pb-3 font-medium">Typ</th>
                   <th className="pb-3 font-medium">Status</th>
@@ -91,31 +174,25 @@ export default function DashboardPage() {
                   <th className="pb-3 font-medium">Letzter Lauf</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/50">
+              <tbody>
                 {pipeline.jobs.map((job) => (
-                  <tr key={job.job_name}>
-                    <td className="py-3 font-medium text-gray-200">
+                  <tr key={job.job_name} className="border-b" style={{ borderColor: "var(--border)" }}>
+                    <td className="py-3 font-medium" style={{ color: "var(--text-primary)" }}>
                       {job.job_name}
                     </td>
-                    <td className="py-3 text-gray-400">{job.job_type}</td>
+                    <td className="py-3" style={{ color: "var(--text-secondary)" }}>{job.job_type}</td>
                     <td className="py-3">
-                      <StatusBadge
-                        label={job.last_status ?? "N/A"}
-                        variant="status"
-                      />
+                      <StatusBadge label={job.last_status ?? "N/A"} variant="status" />
                     </td>
                     <td className="py-3">
                       {job.last_signal ? (
-                        <StatusBadge
-                          label={job.last_signal}
-                          variant="signal"
-                        />
+                        <StatusBadge label={job.last_signal} variant="signal" />
                       ) : (
-                        <span className="text-gray-600">--</span>
+                        <span style={{ color: "var(--text-muted)" }}>–</span>
                       )}
                     </td>
-                    <td className="py-3 text-gray-400">
-                      {job.last_run_at ?? "--"}
+                    <td className="py-3" style={{ color: "var(--text-secondary)" }}>
+                      {job.last_run_at ?? "–"}
                     </td>
                   </tr>
                 ))}
@@ -128,24 +205,37 @@ export default function DashboardPage() {
       {/* Quick Actions */}
       <Card title="Schnellaktionen">
         <div className="flex flex-wrap gap-3">
-          <a
-            href="/analysis"
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500"
+          <Link
+            to="/analysis"
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500"
           >
-            Neue Analyse starten
-          </a>
-          <a
-            href="/backtest"
-            className="rounded-lg bg-gray-700 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-gray-600"
+            <Search className="h-4 w-4" />
+            Neue Analyse
+          </Link>
+          <Link
+            to="/live"
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+            style={{ background: "var(--bg-card-hover)", color: "var(--text-primary)" }}
           >
-            Backtest starten
-          </a>
-          <a
-            href="/portfolio"
-            className="rounded-lg bg-gray-700 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-gray-600"
+            <Activity className="h-4 w-4" />
+            Live Trading
+          </Link>
+          <Link
+            to="/backtest"
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+            style={{ background: "var(--bg-card-hover)", color: "var(--text-primary)" }}
           >
-            Portfolio Backtest
-          </a>
+            <TrendingUp className="h-4 w-4" />
+            Backtest
+          </Link>
+          <Link
+            to="/portfolio"
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+            style={{ background: "var(--bg-card-hover)", color: "var(--text-primary)" }}
+          >
+            <Briefcase className="h-4 w-4" />
+            Portfolio
+          </Link>
         </div>
       </Card>
     </div>

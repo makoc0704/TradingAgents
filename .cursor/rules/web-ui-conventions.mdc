@@ -1,0 +1,197 @@
+---
+description: Conventions for the web interface – React frontend, FastAPI backend, UI/UX patterns, and component architecture
+globs: tradingagents/web/**/*,frontend/**/*
+alwaysApply: false
+---
+
+# Web UI/UX Conventions
+
+## Tech Stack
+
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| Backend | FastAPI + Uvicorn | ≥0.115 |
+| Frontend | React 19, TypeScript, Vite 6 | strict mode |
+| Styling | Tailwind CSS 4 (via `@tailwindcss/vite`) | utility-first |
+| Charts – Finance | `lightweight-charts` (TradingView) | Candlestick, equity curves, trade markers |
+| Charts – Analytics | `recharts` | Radar, Pie, area charts |
+| Icons | `lucide-react` | **Never use emojis** for nav/UI icons |
+| Markdown | `react-markdown` + `remark-gfm` | For agent reports |
+| Realtime | WebSocket (`/ws/stream/{task_id}`) | Prefer over REST polling |
+
+## Architecture Principles
+
+- **Backend reads, frontend displays** – all business logic stays in Python; React is a thin presentation layer.
+- **TaskManager for long-running ops** – analysis, backtest, portfolio, live-trading run as background tasks.
+- **WebSocket for progress** – use the existing `useWebSocket(taskId)` hook instead of `useInterval` polling. The hook is in `hooks/useWebSocket.ts` and already supports cancel.
+- **ResultReader for history** – persisted results are read-only from disk via `services/result_reader.py`.
+- **One router per domain** – `routers/analysis.py`, `routers/backtest.py`, `routers/live.py`, etc.
+
+## Frontend File Organization
+
+```
+frontend/src/
+  api/client.ts              # Typed API client (one function per endpoint)
+  hooks/                     # Custom React hooks
+    useWebSocket.ts          # WebSocket progress streaming
+    useApi.ts                # Generic fetch wrapper
+    useInterval.ts           # Polling fallback (prefer WebSocket)
+  types/index.ts             # All TypeScript interfaces (mirrors backend schemas)
+  utils/format.ts            # Number/date/signal formatting
+  components/
+    Layout/                  # Sidebar, Layout shell, ThemeToggle
+    common/                  # Card, MetricCard, StatusBadge, ProgressBar, Skeleton, TabGroup, Timeline, EmptyState
+    charts/                  # TradingChart (lightweight-charts), SparkLine, RadarChart, GaugeChart
+    analysis/                # AgentFlowDiagram, DebateView, ReportCard, ConfidenceMeter
+  pages/
+    DashboardPage.tsx        # Overview: activity feed, sparklines, portfolio hero
+    AnalysisPage.tsx         # Single-ticker analysis with agent flow
+    AgentFlowPage.tsx        # Full agent decision visualization (USP)
+    BacktestPage.tsx         # Single-ticker historical backtest
+    PortfolioPage.tsx        # Multi-asset portfolio backtest
+    LiveTradingPage.tsx      # Paper trading dashboard (positions, trades, equity)
+    RiskPage.tsx             # Quantitative risk metrics (radar, gauges)
+    PipelinePage.tsx         # Pipeline job management
+    HistoryPage.tsx          # Analysis archive and comparison
+```
+
+## Component Conventions
+
+### General Rules
+- Functional components only, `export default function ComponentName()`.
+- Props via TypeScript interface (named `ComponentNameProps`), never `any`.
+- Custom hooks for data fetching — pages never call `fetch()` directly.
+- Prefer composition over prop drilling — use context sparingly.
+
+### Styling
+- Tailwind utility classes inline — no CSS modules, no styled-components.
+- Theme via CSS custom properties in `index.css` controlled by `data-theme` attribute.
+- Dark mode is default; support light mode via `ThemeToggle`.
+- Consistent color palette:
+
+| Semantic | Dark Mode | Usage |
+|----------|-----------|-------|
+| bg-primary | `gray-950` | Page background |
+| bg-card | `gray-900` | Card surfaces |
+| border | `gray-800` | Card/table borders |
+| text-primary | `gray-100` | Headings, values |
+| text-secondary | `gray-400` | Labels, descriptions |
+| text-muted | `gray-500/600` | Timestamps, footnotes |
+| accent-buy | `emerald-400/500` | BUY signals, positive returns |
+| accent-sell | `red-400/500` | SELL signals, negative returns |
+| accent-hold | `gray-400` | HOLD signals, neutral |
+| accent-action | `blue-500/600` | Buttons, links, running tasks |
+
+### Loading States
+- Use `Skeleton` shimmer components (not a generic spinner) for content areas.
+- Use `Loading` component only for full-page initial loads.
+- Use `EmptyState` with illustration/icon for empty lists and first-run states.
+
+### Charts
+- **Financial price data** → `lightweight-charts` (`TradingChart` wrapper). Supports candlesticks, line, area, volume, trade markers.
+- **Analytics/KPIs** → `recharts` (Radar, Pie, composed area). Consistent dark theme styling.
+- **Dashboard sparklines** → `SparkLine` component (thin `lightweight-charts` wrapper, no axes).
+- All charts must be responsive via `ResponsiveContainer` or `chart.applyOptions({ autoSize: true })`.
+
+## Page Design Patterns
+
+### Agent Flow (USP – highest priority)
+The multi-agent decision process is the product's unique selling point. Visualize it:
+1. **Pipeline flow**: Analysts → Investment Debate → Risk Debate → Trader → Signal
+2. **Each node is expandable**: Click to show full report (Markdown-rendered).
+3. **Debate as chat**: Bull/Bear arguments as alternating chat bubbles with Judge verdict.
+4. **Data is already available**: `AnalysisResult` contains `market_report`, `sentiment_report`, `news_report`, `fundamentals_report`, `investment_debate`, `risk_debate`, `confidence`.
+
+### Live Trading Dashboard
+- Portfolio value hero card with daily P&L.
+- Positions table: ticker, shares, entry price, current price, unrealized P&L, weight.
+- Trade log as vertical timeline.
+- Equity curve via `TradingChart` with trade markers.
+- "Run Now" button triggers `/api/live/run-now`.
+
+### Backtest Results
+- Equity curve with `lightweight-charts` (not Recharts line chart).
+- Trade markers (arrows) on the price chart at BUY/SELL points.
+- Drawdown sub-chart below the main chart.
+- Agent vs Buy-and-Hold as two overlaid lines.
+
+## Backend API Conventions
+
+### Endpoint Pattern
+```
+POST /api/{domain}/run          → Start background task, return task_id
+GET  /api/{domain}/status/{id}  → Poll task status (fallback if no WebSocket)
+GET  /api/{domain}/result/{id}  → Get completed task result
+GET  /api/{domain}/{params}     → Get persisted/computed data (synchronous)
+```
+
+### Response Envelope
+Every endpoint returns `ApiResponse[T]`:
+```python
+{"success": true, "data": T, "error": null, "timestamp": "..."}
+```
+
+### New Router: `routers/live.py`
+```
+GET  /api/live/portfolio        → Current portfolio state (cash, positions, value)
+GET  /api/live/trades?limit=50  → Recent trades from state
+GET  /api/live/performance      → Aggregate performance metrics
+GET  /api/live/history          → Run snapshots for equity curve
+POST /api/live/run-now          → Trigger immediate live trading run
+```
+
+Data source: `LivePortfolioState` (reads `state.json` read-only via `LiveReader` service).
+
+## Routing (React Router)
+
+```tsx
+<Route index element={<DashboardPage />} />
+<Route path="analysis" element={<AnalysisPage />} />
+<Route path="agent-flow/:ticker/:date" element={<AgentFlowPage />} />
+<Route path="backtest" element={<BacktestPage />} />
+<Route path="portfolio" element={<PortfolioPage />} />
+<Route path="live" element={<LiveTradingPage />} />
+<Route path="risk/:ticker/:date" element={<RiskPage />} />
+<Route path="pipeline" element={<PipelinePage />} />
+<Route path="history" element={<HistoryPage />} />
+```
+
+## Sidebar Navigation Order
+
+1. Dashboard (`/`) — `LayoutDashboard`
+2. Analyse (`/analysis`) — `Search`
+3. Live Trading (`/live`) — `Activity`
+4. Backtest (`/backtest`) — `TrendingUp`
+5. Portfolio (`/portfolio`) — `Briefcase`
+6. Risk (`/risk/AAPL/2024-06-01`) — `Shield`
+7. Pipeline (`/pipeline`) — `Settings`
+8. History (`/history`) — `Clock`
+
+Icons are Lucide React components — never emojis.
+
+## Implementation Phases
+
+| Phase | Scope | Files |
+|-------|-------|-------|
+| 1. Foundation | Lucide icons, Skeleton, Sidebar redesign, WebSocket migration, theme system | Sidebar, Layout, index.css, AnalysisPage, BacktestPage, PortfolioPage, package.json |
+| 2. Agent Flow | AgentFlowPage, DebateView, ReportCard, ConfidenceMeter, AnalysisPage tabs | New components + pages, client.ts, types |
+| 3. Live Trading | Backend live router, LiveTradingPage, TradingChart wrapper | routers/live.py, services/live_reader.py, new page + components |
+| 4. Charts & Risk | TradingChart in Backtest/Portfolio, RiskPage, RadarChart, GaugeChart | BacktestPage, PortfolioPage, new page + chart components |
+| 5. History & Polish | HistoryPage, Dashboard redesign, SparkLine, Timeline, Dark/Light toggle | DashboardPage, new page, ThemeToggle |
+
+## Testing
+
+- Frontend: no test framework yet — keep components pure and testable.
+- Backend routers: test via `httpx.AsyncClient` with mocked `TaskManager` and `ResultReader`.
+- New `routers/live.py`: mock `LivePortfolioState` reads, never touch real state files.
+- WebSocket: test via FastAPI `TestClient.websocket_connect()`.
+
+## What NOT to Do
+
+- Never put business logic in React components — all computation in Python.
+- Never use `any` in TypeScript — define proper interfaces in `types/index.ts`.
+- Never use emoji for UI icons — use `lucide-react`.
+- Never hardcode API URLs — use `BASE` constant from `api/client.ts`.
+- Never use REST polling when WebSocket is available for task progress.
+- Never use Recharts for financial price data — use `lightweight-charts`.
+- Never add inline `<style>` tags — use Tailwind utilities.
