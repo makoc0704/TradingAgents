@@ -7,219 +7,494 @@
   <a href="https://discord.com/invite/hk9PGKShPK" target="_blank"><img alt="Discord" src="https://img.shields.io/badge/Discord-TradingResearch-7289da?logo=discord&logoColor=white&color=7289da"/></a>
   <a href="./assets/wechat.png" target="_blank"><img alt="WeChat" src="https://img.shields.io/badge/WeChat-TauricResearch-brightgreen?logo=wechat&logoColor=white"/></a>
   <a href="https://x.com/TauricResearch" target="_blank"><img alt="X Follow" src="https://img.shields.io/badge/X-TauricResearch-white?logo=x&logoColor=white"/></a>
-  <br>
-  <a href="https://github.com/TauricResearch/" target="_blank"><img alt="Community" src="https://img.shields.io/badge/Join_GitHub_Community-TauricResearch-14C290?logo=discourse"/></a>
-</div>
-
-<div align="center">
-  <!-- Keep these links. Translations will automatically update with the README. -->
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=de">Deutsch</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=es">Español</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=fr">français</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=ja">日本語</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=ko">한국어</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=pt">Português</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=ru">Русский</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=zh">中文</a>
 </div>
 
 ---
 
-# TradingAgents: Multi-Agents LLM Financial Trading Framework 
+# TradingAgents: Multi-Agents LLM Financial Trading Framework
 
-> 🎉 **TradingAgents** officially released! We have received numerous inquiries about the work, and we would like to express our thanks for the enthusiasm in our community.
->
-> So we decided to fully open-source the framework. Looking forward to building impactful projects with you!
-
-<div align="center">
-<a href="https://www.star-history.com/#TauricResearch/TradingAgents&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=TauricResearch/TradingAgents&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=TauricResearch/TradingAgents&type=Date" />
-   <img alt="TradingAgents Star History" src="https://api.star-history.com/svg?repos=TauricResearch/TradingAgents&type=Date" style="width: 80%; height: auto;" />
- </picture>
-</a>
-</div>
-
-<div align="center">
-
-🚀 [TradingAgents](#tradingagents-framework) | ⚡ [Installation & CLI](#installation-and-cli) | 🎬 [Demo](https://www.youtube.com/watch?v=90gr5lwjIho) | 📦 [Package Usage](#tradingagents-package) | 🤝 [Contributing](#contributing) | 📄 [Citation](#citation)
-
-</div>
-
-## TradingAgents Framework
-
-TradingAgents is a multi-agent trading framework that mirrors the dynamics of real-world trading firms. By deploying specialized LLM-powered agents: from fundamental analysts, sentiment experts, and technical analysts, to trader, risk management team, the platform collaboratively evaluates market conditions and informs trading decisions. Moreover, these agents engage in dynamic discussions to pinpoint the optimal strategy.
+TradingAgents ist ein Multi-Agenten-Trading-Framework, das die Dynamik realer Handelsunternehmen nachbildet. Spezialisierte LLM-Agenten -- Fundamental-Analysten, Sentiment-Experten, technische Analysten, Researcher, Trader und ein Risikomanagement-Team -- bewerten gemeinsam Marktbedingungen und treffen Handelsentscheidungen durch strukturierte Debatten.
 
 <p align="center">
   <img src="assets/schema.png" style="width: 100%; height: auto;">
 </p>
 
-> TradingAgents framework is designed for research purposes. Trading performance may vary based on many factors, including the chosen backbone language models, model temperature, trading periods, the quality of data, and other non-deterministic factors. [It is not intended as financial, investment, or trading advice.](https://tauric.ai/disclaimer/)
+> **Hinweis:** Dieses Framework dient Forschungszwecken. Trading-Performance haengt von vielen Faktoren ab (LLM-Modell, Datenqualitaet, Zeitraum). [Es stellt keine Finanz- oder Anlageberatung dar.](https://tauric.ai/disclaimer/)
 
-Our framework decomposes complex trading tasks into specialized roles. This ensures the system achieves a robust, scalable approach to market analysis and decision-making.
+---
 
-### Analyst Team
-- Fundamentals Analyst: Evaluates company financials and performance metrics, identifying intrinsic values and potential red flags.
-- Sentiment Analyst: Analyzes social media and public sentiment using sentiment scoring algorithms to gauge short-term market mood.
-- News Analyst: Monitors global news and macroeconomic indicators, interpreting the impact of events on market conditions.
-- Technical Analyst: Utilizes technical indicators (like MACD and RSI) to detect trading patterns and forecast price movements.
+## Inhaltsverzeichnis
 
-<p align="center">
-  <img src="assets/analyst.png" width="100%" style="display: inline-block; margin: 0 2%;">
-</p>
+- [Features](#features)
+- [Architektur](#architektur)
+- [Installation](#installation)
+- [Konfiguration](#konfiguration)
+- [Interfaces](#interfaces)
+  - [Web-Interface](#web-interface)
+  - [CLI](#cli)
+  - [Python API](#python-api)
+- [Web-Interface im Detail](#web-interface-im-detail)
+  - [Dashboard](#dashboard)
+  - [Analyse](#analyse)
+  - [Agent Flow](#agent-flow)
+  - [Backtest](#backtest)
+  - [Portfolio](#portfolio)
+  - [Live Trading](#live-trading)
+  - [Risk Metrics](#risk-metrics)
+  - [Pipeline](#pipeline)
+  - [History](#history)
+- [Live Trading Modul](#live-trading-modul)
+- [Datenquellen](#datenquellen)
+- [Projektstruktur](#projektstruktur)
+- [Tests](#tests)
+- [Contributing](#contributing)
+- [Citation](#citation)
 
-### Researcher Team
-- Comprises both bullish and bearish researchers who critically assess the insights provided by the Analyst Team. Through structured debates, they balance potential gains against inherent risks.
+---
 
-<p align="center">
-  <img src="assets/researcher.png" width="70%" style="display: inline-block; margin: 0 2%;">
-</p>
+## Features
 
-### Trader Agent
-- Composes reports from the analysts and researchers to make informed trading decisions. It determines the timing and magnitude of trades based on comprehensive market insights.
+| Feature | Beschreibung |
+|---------|-------------|
+| **Multi-Agenten-Analyse** | 4 Analysten (Market, Fundamentals, News, Social), Bull/Bear-Researcher, Trader und Risikomanagement |
+| **Strukturierte Debatten** | Agenten debattieren Investmentthesen und Risikoeinschaetzungen in mehreren Runden |
+| **Web-Interface** | Modernes React-Dashboard mit Dark/Light Theme, Echtzeit-Fortschritt via WebSocket |
+| **Backtesting** | Historische Simulation mit Equity-Kurven, Trade-Markern und Performance-Metriken |
+| **Portfolio-Management** | Multi-Asset-Backtests mit Allokationsstrategien (Equal Weight, Risk Parity, Min Variance) |
+| **Live Paper Trading** | Taegliches Trading mit Live-Daten ueber einen Dummy-Broker, persistenter Portfolio-State |
+| **Automatisierte Pipeline** | Scheduling von Analyse-Jobs mit Cron-Ausdruecken und Benachrichtigungen |
+| **Risikomanagement** | VaR, CVaR, Sharpe, Sortino, Drawdown, Beta, RSI und weitere Metriken |
+| **Agent Memory** | ChromaDB-basiertes Erinnerungssystem fuer aehnliche Marktsituationen |
+| **CLI** | Interaktive Terminal-Oberflaeche mit Rich-Formatierung |
 
-<p align="center">
-  <img src="assets/trader.png" width="70%" style="display: inline-block; margin: 0 2%;">
-</p>
+---
 
-### Risk Management and Portfolio Manager
-- Continuously evaluates portfolio risk by assessing market volatility, liquidity, and other risk factors. The risk management team evaluates and adjusts trading strategies, providing assessment reports to the Portfolio Manager for final decision.
-- The Portfolio Manager approves/rejects the transaction proposal. If approved, the order will be sent to the simulated exchange and executed.
+## Architektur
 
-<p align="center">
-  <img src="assets/risk.png" width="70%" style="display: inline-block; margin: 0 2%;">
-</p>
+```
+                    ┌─────────────────────────────────────┐
+                    │           Web-Interface              │
+                    │  React 19 · Tailwind · Vite · WS    │
+                    └──────────────┬──────────────────────┘
+                                   │ REST + WebSocket
+                    ┌──────────────▼──────────────────────┐
+                    │         FastAPI Backend              │
+                    │  Routers · TaskManager · LiveReader  │
+                    └──────────────┬──────────────────────┘
+                                   │
+          ┌────────────────────────┼────────────────────────┐
+          │                        │                        │
+   ┌──────▼──────┐         ┌──────▼──────┐         ┌──────▼──────┐
+   │  Backtesting │         │  Live Trading│         │  Pipeline   │
+   │  Runner      │         │  Runner      │         │  Scheduler  │
+   └──────┬──────┘         └──────┬──────┘         └──────┬──────┘
+          │                        │                        │
+          └────────────────────────┼────────────────────────┘
+                                   │
+                    ┌──────────────▼──────────────────────┐
+                    │      TradingAgentsGraph             │
+                    │  LangGraph StateGraph Orchestrator   │
+                    ├─────────────────────────────────────┤
+                    │  Analysts → Researchers → Trader    │
+                    │  → Risk Debate → Final Decision     │
+                    └──────────────┬──────────────────────┘
+                                   │
+                    ┌──────────────▼──────────────────────┐
+                    │          Dataflows                   │
+                    │  yfinance · Alpha Vantage · OpenAI   │
+                    └─────────────────────────────────────┘
+```
 
-## Installation and CLI
+### Agenten-Team
 
-### Installation
+| Rolle | Agenten | Aufgabe |
+|-------|---------|---------|
+| **Analysten** | Market, Fundamentals, News, Social Media | Sammeln und bewerten Marktdaten aus verschiedenen Perspektiven |
+| **Researcher** | Bull Researcher, Bear Researcher | Debattieren Investment-Thesen (bullish vs. bearish) |
+| **Trader** | Trader Agent | Trifft die finale Handelsentscheidung auf Basis aller Reports |
+| **Risiko** | Aggressive, Conservative, Neutral Debater | Bewerten Risiken und erstellen Risk-Assessment fuer den Portfolio Manager |
 
-Clone TradingAgents:
+---
+
+## Installation
+
+### Voraussetzungen
+
+- Python 3.10+
+- Node.js 18+ (fuer das Web-Interface)
+
+### Setup
+
 ```bash
-git clone https://github.com/TauricResearch/TradingAgents.git
+git clone https://github.com/makoc0704/TradingAgents.git
 cd TradingAgents
-```
 
-Create a virtual environment in any of your favorite environment managers:
-```bash
-conda create -n tradingagents python=3.13
-conda activate tradingagents
-```
+# Python Environment
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# Linux/macOS:
+# source .venv/bin/activate
 
-Install dependencies:
-```bash
+# Abhaengigkeiten installieren
 pip install -r requirements.txt
+# oder mit uv:
+uv sync
 ```
 
-### Required APIs
+### API-Keys
 
-You will need the OpenAI API for all the agents, and [Alpha Vantage API](https://www.alphavantage.co/support/#api-key) for fundamental and news data (default configuration).
+Erstelle eine `.env`-Datei im Projektroot:
+
+```env
+OPENAI_API_KEY=sk-...
+ALPHA_VANTAGE_API_KEY=...
+```
+
+OpenAI wird fuer alle LLM-Agenten benoetigt. [Alpha Vantage](https://www.alphavantage.co/support/#api-key) liefert Fundamental- und News-Daten (kostenloser Key verfuegbar).
+
+---
+
+## Konfiguration
+
+Alle Einstellungen befinden sich in `tradingagents/default_config.py`:
+
+```python
+from tradingagents.default_config import DEFAULT_CONFIG
+
+config = DEFAULT_CONFIG.copy()
+
+# LLM-Modelle (guenstiger fuer Tests)
+config["deep_think_llm"] = "o4-mini"
+config["quick_think_llm"] = "gpt-4.1-mini"
+
+# Debattierunden
+config["max_debate_rounds"] = 1
+
+# Datenquellen
+config["data_vendors"] = {
+    "core_stock_apis": "yfinance",
+    "technical_indicators": "yfinance",
+    "fundamental_data": "alpha_vantage",
+    "news_data": "alpha_vantage",
+}
+
+# Backtesting-Profile: "quick", "standard", "full"
+config["backtest_profile"] = "quick"
+```
+
+---
+
+## Interfaces
+
+TradingAgents bietet drei Interfaces: **Web-Interface**, **CLI** und **Python API**.
+
+### Web-Interface
 
 ```bash
-export OPENAI_API_KEY=$YOUR_OPENAI_API_KEY
-export ALPHA_VANTAGE_API_KEY=$YOUR_ALPHA_VANTAGE_API_KEY
+# Frontend bauen (einmalig)
+cd tradingagents/web/frontend
+npm install
+npm run build
+cd ../../..
+
+# Server starten
+python -m tradingagents.web
 ```
 
-Alternatively, you can create a `.env` file in the project root with your API keys (see `.env.example` for reference):
+Das Web-Interface ist dann unter **http://localhost:8000** erreichbar.
+
+Fuer die Entwicklung mit Hot-Reload:
+
 ```bash
-cp .env.example .env
-# Edit .env with your actual API keys
+# Terminal 1: Backend
+python -m tradingagents.web --dev
+
+# Terminal 2: Frontend Dev-Server
+cd tradingagents/web/frontend
+npm run dev
 ```
 
-**Note:** We are happy to partner with Alpha Vantage to provide robust API support for TradingAgents. You can get a free AlphaVantage API [here](https://www.alphavantage.co/support/#api-key), TradingAgents-sourced requests also have increased rate limits to 60 requests per minute with no daily limits. Typically the quota is sufficient for performing complex tasks with TradingAgents thanks to Alpha Vantage’s open-source support program. If you prefer to use OpenAI for these data sources instead, you can modify the data vendor settings in `tradingagents/default_config.py`.
+### CLI
 
-### CLI Usage
-
-You can also try out the CLI directly by running:
 ```bash
 python -m cli.main
 ```
-You will see a screen where you can select your desired tickers, date, LLMs, research depth, etc.
 
-<p align="center">
-  <img src="assets/cli/cli_init.png" width="100%" style="display: inline-block; margin: 0 2%;">
-</p>
+Interaktive Oberflaeche mit Ticker-Auswahl, Datumsangabe, LLM-Konfiguration und Echtzeit-Fortschritt.
 
-An interface will appear showing results as they load, letting you track the agent's progress as it runs.
-
-<p align="center">
-  <img src="assets/cli/cli_news.png" width="100%" style="display: inline-block; margin: 0 2%;">
-</p>
-
-<p align="center">
-  <img src="assets/cli/cli_transaction.png" width="100%" style="display: inline-block; margin: 0 2%;">
-</p>
-
-## TradingAgents Package
-
-### Implementation Details
-
-We built TradingAgents with LangGraph to ensure flexibility and modularity. We utilize `o1-preview` and `gpt-4o` as our deep thinking and fast thinking LLMs for our experiments. However, for testing purposes, we recommend you use `o4-mini` and `gpt-4.1-mini` to save on costs as our framework makes **lots of** API calls.
-
-### Python Usage
-
-To use TradingAgents inside your code, you can import the `tradingagents` module and initialize a `TradingAgentsGraph()` object. The `.propagate()` function will return a decision. You can run `main.py`, here's also a quick example:
+### Python API
 
 ```python
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 
 ta = TradingAgentsGraph(debug=True, config=DEFAULT_CONFIG.copy())
-
-# forward propagate
 _, decision = ta.propagate("NVDA", "2024-05-10")
 print(decision)
 ```
 
-You can also adjust the default configuration to set your own choice of LLMs, debate rounds, etc.
+---
+
+## Web-Interface im Detail
+
+Das Web-Interface bietet eine Sidebar-Navigation mit Dark/Light Theme-Toggle. Alle langlebigen Operationen (Analyse, Backtest, Live-Run) laufen als Hintergrund-Tasks mit Echtzeit-Fortschritt ueber WebSocket.
+
+### Dashboard
+
+**Route:** `/`
+
+Die Startseite zeigt eine Uebersicht:
+
+- **Portfolio-Wert** mit SparkLine-Chart der Equity-Kurve
+- **Gesamtrendite** und **Tagesrendite** des Live-Portfolios
+- **Analysierte Ticker** mit Links zur Detail-Ansicht
+- **Pipeline-Status** mit aktiven Jobs
+- **Schnellaktionen** fuer direkten Zugriff auf Analyse, Backtest, Live Trading und Portfolio
+
+### Analyse
+
+**Route:** `/analysis`
+
+Hier fuehrst du eine Einzelanalyse fuer einen Ticker durch:
+
+1. **Ticker eingeben** (z.B. NVDA, AAPL)
+2. **Datum waehlen** (das Analysedatum)
+3. **Analysten auswaehlen** (Market, Social, News, Fundamentals)
+4. **Analyse starten** -- der Fortschritt wird live per WebSocket angezeigt
+5. **Ergebnis**: Signal (BUY/SELL/HOLD), Konfidenz-Score und Link zum Agent Flow
+
+### Agent Flow
+
+**Route:** `/agent-flow/:ticker/:date`
+
+Visualisiert den kompletten Multi-Agenten-Entscheidungsprozess:
+
+- **Flow-Diagramm**: Zeigt die Pipeline von Analysten ueber Debatten zur finalen Entscheidung
+- **Analysten-Reports**: Aufklappbare Markdown-Berichte jedes Analysten (Market, Fundamentals, News, Sentiment)
+- **Investment-Debatte**: Chat-artige Darstellung der Bull/Bear-Argumente
+- **Risk-Debatte**: Aggressive vs. Conservative vs. Neutral Einschaetzungen
+- **Finale Entscheidung**: Das Endergebnis mit Konfidenz-Meter
+
+### Backtest
+
+**Route:** `/backtest`
+
+Simuliere die Agentenentscheidungen auf historischen Daten:
+
+1. **Ticker, Start/Enddatum, Startkapital** konfigurieren
+2. **Profil waehlen**: `quick` (schnell, weniger Runden), `standard`, `full` (komplett)
+3. **Ergebnisse**:
+   - KPI-Cards: Gesamtrendite, Sharpe Ratio, Max Drawdown, Endwert, Win Rate, Alpha
+   - **Equity-Kurve** mit Trade-Markern (TradingView-Chart)
+   - **Trade-Historie** mit Datum, Aktion, Preis, Stueckzahl
+
+### Portfolio
+
+**Route:** `/portfolio`
+
+Multi-Asset Portfolio-Backtest:
+
+1. **Ticker kommagetrennt eingeben** (z.B. NVDA, AAPL, MSFT)
+2. **Allokationsstrategie waehlen**: Equal Weight, Risk Parity, Min Variance, Signal Weighted
+3. **Ergebnisse**:
+   - KPI-Cards: Gesamtrendite, Sharpe, Drawdown, Endwert
+   - **Portfolio-Wert-Chart** (TradingView)
+   - **Allokations-Tortendiagramm** mit Gewichtung pro Ticker
+   - **Performance pro Ticker** als Tabelle
+
+### Live Trading
+
+**Route:** `/live`
+
+Paper Trading mit Live-Marktdaten:
+
+- **Portfolio-Uebersicht**: Aktueller Wert, Gesamtrendite, Tagesrendite, Cash-Bestand
+- **Performance-KPIs**: Sharpe Ratio, Max Drawdown, Anzahl Trades, Win Rate
+- **Equity-Kurve**: Historischer Portfolio-Verlauf als TradingView-Chart
+- **Trade-Timeline**: Chronologische Darstellung aller Trades (BUY/SELL/HOLD)
+- **Positionen**: Aktuelle Positionen mit Unrealized P&L
+- **Jetzt traden**: Button fuer sofortigen Live-Run mit Fortschrittsanzeige
+
+Der Live-Trading-State wird persistent in `live_portfolio/state.json` gespeichert und ueberlebt Server-Neustarts.
+
+### Risk Metrics
+
+**Route:** `/risk` oder `/risk/:ticker/:date`
+
+Quantitative Risikoanalyse fuer einen Ticker:
+
+- **KPI-Cards**: Annualisierte Volatilitaet, Max Drawdown, Sharpe Ratio, Sortino Ratio
+- **Risk Radar**: Recharts RadarChart mit normalisierten Metriken (Volatilitaet, Drawdown, VaR, Beta, RSI, ATR)
+- **Gauge Charts**: Visuelle Anzeigen fuer RSI, VaR 95%, Beta, Current Drawdown
+- **Zusaetzliche Metriken**: Beta, VaR 99%, CVaR 95%, ATR, SMA 50/200, aktueller Kurs
+
+### Pipeline
+
+**Route:** `/pipeline`
+
+Automatisierte Analyse-Jobs verwalten:
+
+- **Status-Uebersicht**: Running/Stopped, Anzahl Jobs
+- **Job-Tabelle**: Name, Typ, Cron-Ausdruck, naechste Ausfuehrung, letzter Status
+- **Manuell ausloesen**: "Jetzt ausfuehren"-Button pro Job
+- **Job-Historie**: Vergangene Ausfuehrungen mit Dauer und Ergebnis
+
+Jobs werden in einer `pipeline.yaml` definiert und via APScheduler nach Cron-Zeitplan ausgefuehrt.
+
+### History
+
+**Route:** `/history`
+
+Archiv aller bisherigen Analysen:
+
+- **Suchfilter** fuer Ticker-Name
+- **Tabelle**: Ticker, Datum, Signal, Konfidenz, Debatte vorhanden
+- **Link zum Agent Flow** fuer jede Analyse
+
+---
+
+## Live Trading Modul
+
+Das Live-Trading-Modul ermoeglicht taegliches Paper Trading mit realen Marktdaten:
 
 ```python
-from tradingagents.graph.trading_graph import TradingAgentsGraph
-from tradingagents.default_config import DEFAULT_CONFIG
+from tradingagents.live.runner import LiveRunner
+from tradingagents.live.models import LiveConfig
 
-# Create a custom config
-config = DEFAULT_CONFIG.copy()
-config["deep_think_llm"] = "gpt-4.1-nano"  # Use a different model
-config["quick_think_llm"] = "gpt-4.1-nano"  # Use a different model
-config["max_debate_rounds"] = 1  # Increase debate rounds
+config = LiveConfig(
+    tickers=["NVDA", "AAPL"],
+    initial_capital=200.0,
+    mode="paper",
+    broker_type="dummy",
+    backtest_profile="quick",
+)
 
-# Configure data vendors (default uses yfinance and Alpha Vantage)
-config["data_vendors"] = {
-    "core_stock_apis": "yfinance",           # Options: yfinance, alpha_vantage, local
-    "technical_indicators": "yfinance",      # Options: yfinance, alpha_vantage, local
-    "fundamental_data": "alpha_vantage",     # Options: openai, alpha_vantage, local
-    "news_data": "alpha_vantage",            # Options: openai, alpha_vantage, google, local
-}
-
-# Initialize with custom config
-ta = TradingAgentsGraph(debug=True, config=config)
-
-# forward propagate
-_, decision = ta.propagate("NVDA", "2024-05-10")
-print(decision)
+runner = LiveRunner(config)
+result = runner.run()
+print(result.to_dict())
 ```
 
-> The default configuration uses yfinance for stock price and technical data, and Alpha Vantage for fundamental and news data. For production use or if you encounter rate limits, consider upgrading to [Alpha Vantage Premium](https://www.alphavantage.co/premium/) for more stable and reliable data access. For offline experimentation, there's a local data vendor option that uses our **Tauric TradingDB**, a curated dataset for backtesting, though this is still in development. We're currently refining this dataset and plan to release it soon alongside our upcoming projects. Stay tuned!
+### Architektur
 
-You can view the full list of configurations in `tradingagents/default_config.py`.
+- **LiveRunner**: Orchestriert den Ablauf (Graph propagieren, Signale ausfuehren, State speichern)
+- **DummyBroker**: Simuliert Orderausfuehrung mit konfigurierbarer Slippage und Kommission
+- **LivePortfolioState**: Persistenter JSON-State (Cash, Positionen, Trade-History, Run-History)
+- **LiveReader**: Read-Only-Service fuer das Web-Interface (Portfolio, Trades, Performance-Berechnung)
+
+### Pipeline-Integration
+
+Fuer taegliches automatisches Trading kann ein Pipeline-Job konfiguriert werden:
+
+```yaml
+# pipeline.yaml
+jobs:
+  - name: daily-live-trading
+    type: live_trading
+    cron: "0 16 * * 1-5"  # Mo-Fr um 16:00
+    config:
+      tickers: ["NVDA", "AAPL"]
+      initial_capital: 200.0
+```
+
+---
+
+## Datenquellen
+
+| Quelle | Datentyp | Konfigurationskey |
+|--------|----------|-------------------|
+| **yfinance** | Aktienkurse, technische Indikatoren | `core_stock_apis`, `technical_indicators` |
+| **Alpha Vantage** | Fundamentaldaten, News | `fundamental_data`, `news_data` |
+| **OpenAI** | Fundamentals, News (alternativ) | `fundamental_data`, `news_data` |
+| **Google News** | Nachrichten-Feed | `news_data` |
+| **Reddit (PRAW)** | Social-Media-Sentiment | via Social Media Analyst |
+
+Konfiguration in `DEFAULT_CONFIG["data_vendors"]`.
+
+---
+
+## Projektstruktur
+
+```
+TradingAgents/
+├── tradingagents/
+│   ├── agents/                 # LLM-Agenten
+│   │   ├── analysts/           #   Market, Fundamentals, News, Social Media
+│   │   ├── researchers/        #   Bull & Bear Researcher
+│   │   ├── managers/           #   Research & Risk Manager
+│   │   ├── risk_mgmt/          #   Aggressive, Conservative, Neutral Debater
+│   │   ├── trader/             #   Trader Agent
+│   │   └── utils/              #   Tools, Memory, States
+│   ├── dataflows/              # Datenquellen-Abstraction
+│   ├── graph/                  # LangGraph Workflow
+│   ├── backtesting/            # Backtesting-Engine
+│   ├── portfolio/              # Portfolio-Management & Optimierung
+│   ├── live/                   # Live Paper Trading
+│   │   ├── runner.py           #   LiveRunner Orchestrator
+│   │   ├── broker/             #   BrokerInterface & DummyBroker
+│   │   ├── state.py            #   Persistenter Portfolio-State
+│   │   └── models.py           #   LiveConfig, LiveRunResult
+│   ├── pipeline/               # Automatisierte Job-Pipeline
+│   ├── risk/                   # Risikometriken-Berechnung
+│   └── web/                    # Web-Interface
+│       ├── app.py              #   FastAPI Application Factory
+│       ├── routers/            #   API-Endpunkte (analysis, backtest, live, ...)
+│       ├── services/           #   TaskManager, ResultReader, LiveReader
+│       ├── schemas/            #   Pydantic Request/Response Models
+│       └── frontend/           #   React 19 + TypeScript + Vite
+│           └── src/
+│               ├── pages/      #     9 Pages (Dashboard, Analysis, ...)
+│               ├── components/ #     Layout, Charts, Common Components
+│               ├── hooks/      #     useWebSocket, useApi, useInterval
+│               ├── api/        #     Typisierter API Client
+│               └── types/      #     TypeScript Interfaces
+├── cli/                        # CLI-Interface (Typer + Rich)
+├── tests/                      # pytest Test Suite
+├── .cursor/rules/              # Cursor-AI Konventionen
+├── setup.py                    # Package-Definition
+├── pyproject.toml              # Moderne Python-Konfiguration
+└── requirements.txt            # Python-Abhaengigkeiten
+```
+
+---
+
+## Tests
+
+```bash
+# Alle Tests
+uv run python -m pytest tests/ -v
+
+# Live Trading Tests
+uv run python -m pytest tests/test_live/ -v
+
+# Web-Interface Tests
+uv run python -m pytest tests/test_web/ -v
+
+# Einzelne Test-Dateien
+uv run python -m pytest tests/test_web/test_live_reader.py -v
+uv run python -m pytest tests/test_web/test_live_router.py -v
+```
+
+Alle API-Calls und LLM-Aufrufe werden in den Tests gemockt.
+
+---
 
 ## Contributing
 
-We welcome contributions from the community! Whether it's fixing a bug, improving documentation, or suggesting a new feature, your input helps make this project better. If you are interested in this line of research, please consider joining our open-source financial AI research community [Tauric Research](https://tauric.ai/).
+Wir freuen uns ueber Beitraege! Ob Bugfixes, Dokumentation oder neue Features -- jeder Input hilft. Fuer Beitraege bitte die Konventionen in `.cursor/rules/git-conventions.mdc` beachten.
+
+**Commit-Format:** `type(scope): beschreibung` (z.B. `feat(web): add risk metrics page`)
 
 ## Citation
 
-Please reference our work if you find *TradingAgents* provides you with some help :)
-
-```
+```bibtex
 @misc{xiao2025tradingagentsmultiagentsllmfinancial,
-      title={TradingAgents: Multi-Agents LLM Financial Trading Framework}, 
+      title={TradingAgents: Multi-Agents LLM Financial Trading Framework},
       author={Yijia Xiao and Edward Sun and Di Luo and Wei Wang},
       year={2025},
       eprint={2412.20138},
       archivePrefix={arXiv},
       primaryClass={q-fin.TR},
-      url={https://arxiv.org/abs/2412.20138}, 
+      url={https://arxiv.org/abs/2412.20138},
 }
 ```
