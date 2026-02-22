@@ -6,16 +6,28 @@ import type {
   RiskMetrics,
   PipelineStatus,
   AnalysisResult,
+  LivePortfolio,
+  LiveTrade,
+  LivePerformance,
+  LiveRunSnapshot,
 } from "../types";
 
 const BASE = "/api";
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<ApiResponse<T>> {
-  const res = await fetch(`${BASE}${url}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
-  return res.json();
+  try {
+    const res = await fetch(`${BASE}${url}`, {
+      headers: { "Content-Type": "application/json" },
+      ...init,
+    });
+    if (!res.ok) {
+      return { success: false, error: `HTTP ${res.status}: ${res.statusText}` } as ApiResponse<T>;
+    }
+    return await res.json();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Network error";
+    return { success: false, error: message } as ApiResponse<T>;
+  }
 }
 
 // --- Analysis ---
@@ -119,6 +131,28 @@ export async function getRiskMetrics(
   date: string
 ): Promise<ApiResponse<RiskMetrics>> {
   return fetchJson(`/risk/${ticker}/${date}`);
+}
+
+// --- Live Trading ---
+
+export async function getLivePortfolio(): Promise<ApiResponse<LivePortfolio>> {
+  return fetchJson("/live/portfolio");
+}
+
+export async function getLiveTrades(limit = 50): Promise<ApiResponse<LiveTrade[]>> {
+  return fetchJson(`/live/trades?limit=${limit}`);
+}
+
+export async function getLivePerformance(): Promise<ApiResponse<LivePerformance>> {
+  return fetchJson("/live/performance");
+}
+
+export async function getLiveHistory(): Promise<ApiResponse<LiveRunSnapshot[]>> {
+  return fetchJson("/live/history");
+}
+
+export async function runLiveNow(): Promise<ApiResponse<TaskStatus>> {
+  return fetchJson("/live/run-now", { method: "POST" });
 }
 
 // --- Results ---

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { Settings, RefreshCw, Play, Clock } from "lucide-react";
 import Card from "../components/common/Card";
 import StatusBadge from "../components/common/StatusBadge";
-import Loading from "../components/common/Loading";
+import Skeleton, { SkeletonCard } from "../components/common/Skeleton";
+import EmptyState from "../components/common/EmptyState";
 import { getPipelineStatus, getJobHistory, runPipelineJob } from "../api/client";
 import { formatDateTime } from "../utils/format";
 import type { PipelineStatus } from "../types";
@@ -40,102 +42,102 @@ export default function PipelinePage() {
     loadStatus();
   }
 
-  if (loading) return <Loading message="Pipeline-Status laden..." />;
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton height="h-8" className="w-1/4" />
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-100">Pipeline</h1>
+        <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Pipeline</h1>
         <button
           onClick={loadStatus}
-          className="rounded-lg border border-gray-700 px-3 py-1.5 text-sm text-gray-400 transition-colors hover:border-gray-600 hover:text-gray-200"
+          className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition-colors hover:border-[var(--border-hover)]"
+          style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
         >
+          <RefreshCw className="h-3.5 w-3.5" />
           Aktualisieren
         </button>
       </div>
 
-      {/* Status Overview */}
+      {/* Status */}
       <Card>
         <div className="flex items-center gap-6">
-          <div>
-            <span className="text-sm text-gray-500">Status:</span>{" "}
-            <span
-              className={
-                pipeline?.running ? "text-emerald-400" : "text-gray-400"
-              }
-            >
+          <div className="flex items-center gap-2">
+            <span className="text-sm" style={{ color: "var(--text-muted)" }}>Status:</span>
+            <span className={pipeline?.running ? "text-emerald-400" : ""} style={!pipeline?.running ? { color: "var(--text-secondary)" } : undefined}>
               {pipeline?.running ? "Running" : "Stopped"}
             </span>
           </div>
-          <div>
-            <span className="text-sm text-gray-500">Jobs:</span>{" "}
-            <span className="text-gray-200">{pipeline?.total_jobs ?? 0}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm" style={{ color: "var(--text-muted)" }}>Jobs:</span>
+            <span style={{ color: "var(--text-primary)" }}>{pipeline?.total_jobs ?? 0}</span>
           </div>
         </div>
       </Card>
 
-      {/* Jobs List */}
+      {/* Jobs */}
       {pipeline && pipeline.jobs.length > 0 ? (
         <Card title="Jobs">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800 text-left text-gray-500">
+                <tr className="border-b text-left" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
                   <th className="pb-3 font-medium">Job</th>
                   <th className="pb-3 font-medium">Typ</th>
-                  <th className="pb-3 font-medium">Letzter Status</th>
+                  <th className="pb-3 font-medium">Status</th>
                   <th className="pb-3 font-medium">Signal</th>
                   <th className="pb-3 font-medium">Letzter Lauf</th>
                   <th className="pb-3 font-medium">Dauer</th>
                   <th className="pb-3 font-medium">Aktionen</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/50">
+              <tbody>
                 {pipeline.jobs.map((job) => (
-                  <tr key={job.job_name}>
-                    <td className="py-3 font-medium text-gray-200">
+                  <tr key={job.job_name} className="border-b" style={{ borderColor: "var(--border)" }}>
+                    <td className="py-3 font-medium" style={{ color: "var(--text-primary)" }}>
                       {job.job_name}
                     </td>
-                    <td className="py-3 text-gray-400">{job.job_type}</td>
+                    <td className="py-3" style={{ color: "var(--text-secondary)" }}>{job.job_type}</td>
                     <td className="py-3">
-                      <StatusBadge
-                        label={job.last_status ?? "N/A"}
-                        variant="status"
-                      />
+                      <StatusBadge label={job.last_status ?? "N/A"} variant="status" />
                     </td>
                     <td className="py-3">
                       {job.last_signal ? (
                         <StatusBadge label={job.last_signal} variant="signal" />
                       ) : (
-                        <span className="text-gray-600">--</span>
+                        <span style={{ color: "var(--text-muted)" }}>–</span>
                       )}
                     </td>
-                    <td className="py-3 text-gray-400">
-                      {job.last_run_at
-                        ? formatDateTime(job.last_run_at)
-                        : "--"}
+                    <td className="py-3" style={{ color: "var(--text-secondary)" }}>
+                      {job.last_run_at ? formatDateTime(job.last_run_at) : "–"}
                     </td>
-                    <td className="py-3 text-gray-400">
-                      {job.last_duration_seconds
-                        ? `${job.last_duration_seconds.toFixed(1)}s`
-                        : "--"}
+                    <td className="py-3" style={{ color: "var(--text-secondary)" }}>
+                      {job.last_duration_seconds ? `${job.last_duration_seconds.toFixed(1)}s` : "–"}
                     </td>
                     <td className="py-3">
                       <div className="flex gap-2">
                         <button
                           onClick={() => loadHistory(job.job_name)}
-                          className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-400 hover:border-gray-500 hover:text-gray-200"
+                          className="flex items-center gap-1 rounded border px-2 py-1 text-xs transition-colors hover:border-[var(--border-hover)]"
+                          style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
                         >
+                          <Clock className="h-3 w-3" />
                           Historie
                         </button>
                         <button
                           onClick={() => handleRunNow(job.job_name)}
                           disabled={runningJob === job.job_name}
-                          className="rounded border border-blue-700 px-2 py-1 text-xs text-blue-400 hover:bg-blue-600/20 disabled:opacity-50"
+                          className="flex items-center gap-1 rounded border border-blue-700 px-2 py-1 text-xs text-blue-400 hover:bg-blue-600/20 disabled:opacity-50"
                         >
-                          {runningJob === job.job_name
-                            ? "Laeuft..."
-                            : "Jetzt ausfuehren"}
+                          <Play className="h-3 w-3" />
+                          {runningJob === job.job_name ? "Läuft..." : "Ausführen"}
                         </button>
                       </div>
                     </td>
@@ -146,64 +148,49 @@ export default function PipelinePage() {
           </div>
         </Card>
       ) : (
-        <Card>
-          <p className="text-gray-500">
-            Keine Pipeline-Jobs konfiguriert. Erstelle eine{" "}
-            <code className="text-gray-400">pipeline.yaml</code> und starte die
-            Pipeline.
-          </p>
-        </Card>
+        <EmptyState
+          icon={Settings}
+          title="Keine Pipeline-Jobs"
+          description="Erstelle eine pipeline.yaml und starte die Pipeline."
+        />
       )}
 
       {/* Job History */}
       {selectedJob && (
         <Card title={`Historie: ${selectedJob}`}>
           {historyLoading ? (
-            <Loading message="Historie laden..." />
+            <Skeleton lines={5} />
           ) : history.length === 0 ? (
-            <p className="text-gray-500">Keine Eintraege vorhanden.</p>
+            <div className="text-sm" style={{ color: "var(--text-muted)" }}>Keine Einträge vorhanden.</div>
           ) : (
             <div className="max-h-80 overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-gray-900">
-                  <tr className="border-b border-gray-800 text-left text-gray-500">
+                <thead className="sticky top-0" style={{ background: "var(--bg-card)" }}>
+                  <tr className="border-b text-left" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
                     <th className="pb-2 font-medium">Zeitpunkt</th>
                     <th className="pb-2 font-medium">Status</th>
                     <th className="pb-2 font-medium">Signal</th>
                     <th className="pb-2 font-medium">Dauer</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-800/50">
+                <tbody>
                   {history.map((entry, i) => (
-                    <tr key={i}>
-                      <td className="py-2 text-gray-300">
-                        {formatDateTime(
-                          (entry as Record<string, string>).finished_at ?? ""
-                        )}
+                    <tr key={i} className="border-b" style={{ borderColor: "var(--border)" }}>
+                      <td className="py-2" style={{ color: "var(--text-secondary)" }}>
+                        {formatDateTime((entry as Record<string, string>).finished_at ?? "")}
                       </td>
                       <td className="py-2">
-                        <StatusBadge
-                          label={
-                            (entry as Record<string, string>).status ?? "N/A"
-                          }
-                        />
+                        <StatusBadge label={(entry as Record<string, string>).status ?? "N/A"} />
                       </td>
                       <td className="py-2">
                         {(entry as Record<string, string>).signal ? (
-                          <StatusBadge
-                            label={
-                              (entry as Record<string, string>).signal ?? ""
-                            }
-                            variant="signal"
-                          />
-                        ) : (
-                          "--"
-                        )}
+                          <StatusBadge label={(entry as Record<string, string>).signal ?? ""} variant="signal" />
+                        ) : "–"}
                       </td>
-                      <td className="py-2 text-gray-400">
+                      <td className="py-2" style={{ color: "var(--text-secondary)" }}>
                         {(entry as Record<string, number>).duration_seconds
                           ? `${(entry as Record<string, number>).duration_seconds.toFixed(1)}s`
-                          : "--"}
+                          : "–"}
                       </td>
                     </tr>
                   ))}

@@ -137,6 +137,82 @@ export interface AnalysisResult {
   news_report: string;
   fundamentals_report: string;
   risk_metrics: Record<string, unknown> | null;
-  investment_debate: Record<string, unknown> | null;
-  risk_debate: Record<string, unknown> | null;
+  investment_debate: DebateState | null;
+  risk_debate: DebateState | null;
+}
+
+// --- Live Trading ---
+
+export interface LivePosition {
+  ticker: string;
+  shares: number;
+  avg_entry_price: number;
+  current_price: number;
+  market_value: number;
+  unrealized_pnl: number;
+  unrealized_pnl_pct: number;
+  weight: number;
+}
+
+export interface LivePortfolio {
+  total_value: number;
+  cash: number;
+  initial_capital: number;
+  positions: LivePosition[];
+  total_return: number;
+  daily_return: number;
+  last_updated: string;
+}
+
+export interface LiveTrade {
+  date: string;
+  ticker: string;
+  action: string;
+  price: number;
+  shares: number;
+  commission: number;
+}
+
+export interface LivePerformance {
+  total_return: number;
+  daily_return: number;
+  annualized_return: number;
+  sharpe_ratio: number;
+  max_drawdown: number;
+  win_rate: number;
+  total_trades: number;
+  trading_days: number;
+}
+
+export interface LiveRunSnapshot {
+  date: string;
+  portfolio_value: number;
+  daily_return: number;
+  cumulative_return: number;
+}
+
+// --- Agent Flow / Debate ---
+
+export interface DebateArgument {
+  role: string;
+  content: string;
+  round?: number;
+}
+
+export interface DebateState {
+  bull_arguments?: DebateArgument[];
+  bear_arguments?: DebateArgument[];
+  judge_verdict?: string;
+  rounds?: number;
+  [key: string]: unknown;
+}
+
+// --- History ---
+
+export interface HistoryEntry {
+  ticker: string;
+  date: string;
+  signal: string;
+  confidence: string;
+  has_debate: boolean;
 }

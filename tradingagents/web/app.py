@@ -18,6 +18,7 @@ from .routers import (
     pipeline_router,
     results_router,
     risk_router,
+    live_router,
 )
 from .websocket.stream import websocket_stream_handler
 
@@ -76,6 +77,7 @@ def create_app(config: WebConfig | None = None) -> FastAPI:
     app.include_router(pipeline_router, prefix="/api/pipeline")
     app.include_router(results_router, prefix="/api/results")
     app.include_router(risk_router, prefix="/api/risk")
+    app.include_router(live_router, prefix="/api/live")
 
     # WebSocket endpoint
     @app.websocket("/ws/stream/{task_id}")

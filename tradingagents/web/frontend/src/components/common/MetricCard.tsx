@@ -3,21 +3,44 @@ interface MetricCardProps {
   value: string;
   subtext?: string;
   color?: string;
+  trend?: "up" | "down" | "neutral";
+  mono?: boolean;
 }
 
 export default function MetricCard({
   label,
   value,
   subtext,
-  color = "text-gray-100",
+  color,
+  trend,
+  mono = false,
 }: MetricCardProps) {
+  const trendColors = {
+    up: "text-emerald-400",
+    down: "text-red-400",
+    neutral: "",
+  };
+
+  const valueColor = color ?? (trend ? trendColors[trend] : "");
+
   return (
-    <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4">
-      <div className="text-xs font-medium uppercase tracking-wider text-gray-500">
+    <div
+      className="rounded-xl border p-4 transition-colors hover:border-[var(--border-hover)]"
+      style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}
+    >
+      <div className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
         {label}
       </div>
-      <div className={`mt-1 text-2xl font-bold ${color}`}>{value}</div>
-      {subtext && <div className="mt-1 text-xs text-gray-500">{subtext}</div>}
+      <div className={`mt-1.5 text-2xl font-bold ${valueColor} ${mono ? "font-mono" : ""}`}
+        style={!valueColor ? { color: "var(--text-primary)" } : undefined}
+      >
+        {value}
+      </div>
+      {subtext && (
+        <div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          {subtext}
+        </div>
+      )}
     </div>
   );
 }

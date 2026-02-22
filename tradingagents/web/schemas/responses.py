@@ -22,6 +22,17 @@ class ApiResponse(BaseModel, Generic[T]):
     )
 
 
+# --- Live Trading Requests ---
+
+
+class LiveRunRequest(BaseModel):
+    """Request body for triggering a live trading run."""
+
+    tickers: List[str] = Field(default=["NVDA"], min_length=1)
+    initial_capital: float = Field(default=200.0, gt=0)
+    backtest_profile: str = "quick"
+
+
 # --- Task management ---
 
 
